@@ -1,0 +1,7 @@
+{
+  "name": "Aura AI Phone Assistant",
+  "description": "Smart AI Phone Companion & Voice-to-Action Autonomous Assistant with comprehensive device intelligence, telemetry auditing, and custom persona.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
