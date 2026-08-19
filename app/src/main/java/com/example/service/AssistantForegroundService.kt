@@ -150,6 +150,7 @@ class AssistantForegroundService : Service() {
         val voiceEngine = auraApp.voiceSpeechEngine
         val voiceprintManager = auraApp.voiceprintManager
         val actionEngine = auraApp.actionExecutionEngine
+        val wakeWordManager = auraApp.wakeWordManager
         val repository = auraApp.repository
 
         voiceEngine.startContinuousListening(
@@ -158,6 +159,23 @@ class AssistantForegroundService : Service() {
                     if (recognizedText.isBlank()) return@launch
 
                     val config = repository.config.firstOrNull() ?: com.example.data.local.entity.AssistantConfigEntity()
+
+                    // Check wake word detection
+                    val wakeResult = wakeWordManager.checkWakeWord(
+                        rawText = recognizedText,
+                        configuredAssistantName = config.assistantName,
+                        customWakeWord = config.customWakeWord
+                    )
+
+                    // If wake-word-only mode is active and wake word was not mentioned, ignore ambient chatter
+                    if (config.wakeWordOnlyMode && !wakeResult.isWakeWordDetected) {
+                        return@launch
+                    }
+
+                    // Provide discrete haptic feedback when wake word is called
+                    if (wakeResult.isWakeWordDetected) {
+                        actionEngine.vibratePhone(60L)
+                    }
 
                     // Biometric voiceprint check
                     val verification = if (config.biometricVoiceprintEnabled) {
@@ -190,19 +208,41 @@ class AssistantForegroundService : Service() {
                         return@launch
                     }
 
+                    // If user called name only ("يا أورا" / "Aura")
+                    if (wakeResult.isStandAloneCall) {
+                        val ackMsg = if (config.appLanguage == "en") "Yes, I am listening" else "نعم، تفضل أنا أسمعك"
+                        _lastBackgroundActionStatus.value = "تمت الاستجابة لنداء: ${wakeResult.matchedWakeWord} 🟢"
+                        updateNotification("تم الاستيقاظ لنداء: ${wakeResult.matchedWakeWord} 🟢")
+                        if (!config.muteAllAppSounds && config.voiceFeedbackEnabled) {
+                            voiceEngine.speak(ackMsg)
+                        }
+                        return@launch
+                    }
+
+                    // Extract executable command (strip wake word if present)
+                    val commandToExecute = if (wakeResult.isWakeWordDetected && wakeResult.extractedCommand.isNotBlank()) {
+                        wakeResult.extractedCommand
+                    } else {
+                        recognizedText
+                    }
+
                     // Process command via AI
                     try {
-                        val parsed = repository.processVoiceCommand(recognizedText)
+                        val parsed = repository.processVoiceCommand(commandToExecute)
                         val status = "تم تنفيذ في الخلفية: ${parsed.responseSpeechText}"
                         _lastBackgroundActionStatus.value = status
                         updateNotification(status)
+
+                        if (!config.muteAllAppSounds && config.voiceFeedbackEnabled) {
+                            voiceEngine.speak(parsed.responseSpeechText)
+                        }
 
                         parsed.actionType?.let { action ->
                             actionEngine.executeAction(action, parsed.actionPayload) { feedback ->
                                 serviceScope.launch {
                                     repository.logTelemetry(
                                         type = TelemetryType.TOUCH_GESTURE,
-                                        title = "تنفيذ أمر خلفي: $action",
+                                        title = "تنفيذ أمر خلفي (${wakeResult.matchedWakeWord ?: "مباشر"}): $action",
                                         description = feedback,
                                         severity = TelemetrySeverity.OPTIMAL,
                                         aiAudited = true

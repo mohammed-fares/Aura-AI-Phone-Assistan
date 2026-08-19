@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -26,9 +27,13 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -85,10 +91,13 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val isEnrolling by viewModel.isEnrollingVoiceprint.collectAsStateWithLifecycle()
     val enrollmentStep by viewModel.enrollmentStep.collectAsStateWithLifecycle()
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isAccessibilityConnected by viewModel.isAccessibilityConnected.collectAsStateWithLifecycle()
+    val isBackgroundRunning by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -99,6 +108,8 @@ fun SettingsScreen(
 
     var voiceFeedback by remember(config.voiceFeedbackEnabled) { mutableStateOf(config.voiceFeedbackEnabled) }
     var muteAllAppSounds by remember(config.muteAllAppSounds) { mutableStateOf(config.muteAllAppSounds) }
+    var muteMicBleeps by remember(config.muteMicBleepsAndSystemSounds) { mutableStateOf(config.muteMicBleepsAndSystemSounds) }
+    var autonomousUiInteractions by remember(config.autonomousUiInteractions) { mutableStateOf(config.autonomousUiInteractions) }
     var keepMicOpenContinuously by remember(config.keepMicOpenContinuously) { mutableStateOf(config.keepMicOpenContinuously) }
     var autoContinuousListening by remember(config.autoContinuousListening) { mutableStateOf(config.autoContinuousListening) }
     var biometricVoiceprintEnabled by remember(config.biometricVoiceprintEnabled) { mutableStateOf(config.biometricVoiceprintEnabled) }
@@ -167,16 +178,16 @@ fun SettingsScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = s("لغة التطبيق والنظام", "App & System Language"),
+                                text = s("لغة واجهة التطبيق", "App Interface Language"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = s("يتم اختيار لغة النظام تلقائياً عند فتح التطبيق مع إمكانية التغيير", "Automatically uses system language by default"),
+                                text = s("اختر اللغة الافتراضية لعرض التطبيق", "Select the UI display language"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishTextSecondary,
                                 fontSize = 11.sp
@@ -184,66 +195,518 @@ fun SettingsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        LanguageOptionButton(
-                            title = s("تلقائي (النظام)", "System Default"),
-                            isSelected = appLang == "system",
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.setAppLanguage("system") }
+                        val languages = listOf(
+                            Triple("system", "تلقائي (لغة النظام)", "System Default"),
+                            Triple("ar", "العربية", "Arabic"),
+                            Triple("en", "English", "English")
                         )
-                        LanguageOptionButton(
-                            title = "العربية",
-                            isSelected = appLang == "ar",
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.setAppLanguage("ar") }
+
+                        languages.forEach { (code, labelAr, labelEn) ->
+                            val isSelected = appLang == code
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) PolishPrimaryContainer else PolishSurface,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) PolishPrimary else PolishSurfaceBorder
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { viewModel.setAppLanguage(code) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = PolishPrimary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = if (isAr) labelAr else labelEn,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) PolishPrimary else PolishTextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Autonomous Accessibility & UI Execution Card (CRITICAL USER FEATURE)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("accessibility_service_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, if (isAccessibilityConnected) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFFF59E0B).copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(if (isAccessibilityConnected) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.TouchApp,
+                                contentDescription = null,
+                                tint = if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("التحكم الذاتي الفعلي والدخول للتطبيقات", "Autonomous UI Automation & App Access"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isAccessibilityConnected)
+                                        s("خدمة الوصول متصلة وجاهزة للتنفيذ الذاتي ✅", "Accessibility Service Active & Connected ✅")
+                                    else
+                                        s("خدمة الوصول غير مفعلة (يتطلب تفعيلها للضغط والكتابة)", "Accessibility Service Disabled (Tap to enable)"),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = s(
+                            "يتيح للمساعد فتح التطبيقات، كتابة الرسائل تلقائياً (مثل 'مرحبا')، الضغط على زر الإرسال، وإغلاق التطبيق والعودة للشاشة الرئيسية للهاتف تماماً كما يفعل المستخدم باليد.",
+                            "Enables the assistant to open apps, type message text autonomously, tap the send button, close the app, and return home hands-free."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PolishTextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("تفعيل التنفيذ الذاتي والتنقل بين الصفحات", "Enable Autonomous Cross-App Actions"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("الكتابة والنقر والرجوع التلقائي للشاشة الرئيسية", "Auto-typing, clicking, and returning to home screen"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (autonomousUiInteractions) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autonomousUiInteractions,
+                            onCheckedChange = {
+                                autonomousUiInteractions = it
+                                viewModel.updateAssistantConfig(config.copy(autonomousUiInteractions = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_autonomous_ui")
                         )
-                        LanguageOptionButton(
-                            title = "English",
-                            isSelected = appLang == "en",
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.setAppLanguage("en") }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { viewModel.openAccessibilitySettings(context) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("btn_open_accessibility_settings"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isAccessibilityConnected) PolishSurface else PolishPrimary
+                        ),
+                        border = if (isAccessibilityConnected) BorderStroke(1.dp, PolishSurfaceBorder) else null
+                    ) {
+                        Icon(
+                            imageVector = if (isAccessibilityConnected) Icons.Default.Check else Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            tint = if (isAccessibilityConnected) Color(0xFF10B981) else Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isAccessibilityConnected)
+                                s("إدارة إعدادات خدمة الوصول (مفعلة)", "Manage Accessibility Service (Enabled)")
+                            else
+                                s("فتح إعدادات الهاتف لتفعيل خدمة الوصول (Aura AI)", "Open Android Settings to Enable Aura AI Service"),
+                            color = if (isAccessibilityConnected) PolishTextPrimary else Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
                     }
                 }
             }
         }
 
-        // 1. Biometric Voiceprint Enrollment Card
+        // 2. Audio & Sound Controls Card (NEW USER FEATURE)
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("voiceprint_settings_card"),
+                    .testTag("audio_and_sounds_card"),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
                 border = BorderStroke(1.dp, PolishSurfaceBorder)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (config.voiceprintEnrolled) Color(0xFF10B981).copy(alpha = 0.15f) else PolishPrimaryContainer),
+                                .background(PolishSecondaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (muteMicBleeps && muteAllAppSounds) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                tint = PolishSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = s("التحكم الكامل بأصوات المايك والهاتف", "Microphone & App Sound Controls"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("إلغاء وتشغيل الأصوات ونغمات فتح وإغلاق المايك", "Toggle or mute mic open/close bleeps and app sounds"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 1. Mute Mic Open/Close Bleeps & System Chimes
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("إلغاء أصوات فتح وإغلاق المايك (صمت تام)", "Mute Mic Open/Close Bleeps & Chimes"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = if (muteMicBleeps)
+                                    s("تم كتم نغمات وأصوات المايك والنظام عند بدء الاستماع ✓", "Mic start/stop chimes & system bleeps suppressed ✓")
+                                else
+                                    s("أصوات ونغمات فتح المايك تصدر بشكل طبيعي", "Standard mic chime sounds are audible"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (muteMicBleeps) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = muteMicBleeps,
+                            onCheckedChange = {
+                                muteMicBleeps = it
+                                viewModel.updateAssistantConfig(config.copy(muteMicBleepsAndSystemSounds = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_mute_mic_bleeps")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 2. Mute All App Sounds
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("كتم وتوقيف كافة أصوات التطبيق", "Mute All App Sounds & Audio"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = if (muteAllAppSounds)
+                                    s("تم كتم كافة الأصوات والردود الصوتية ليعمل التطبيق بصمت تام ✓", "All TTS speech and sounds muted for total silent operation ✓")
+                                else
+                                    s("أصوات التطبيق والردود الصوتية مفعلة", "App sounds and voice feedback are enabled"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (muteAllAppSounds) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = muteAllAppSounds,
+                            onCheckedChange = {
+                                muteAllAppSounds = it
+                                viewModel.updateAssistantConfig(config.copy(muteAllAppSounds = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_mute_all_sounds")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 3. Continuous Open Microphone (No Repeated Open/Close)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("إبقاء المايك مفتوحاً باستمرار (دون فتح وإغلاق متكرر)", "Continuous Open Microphone (No cycling)"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("استمرار فتح قناة المايك دائماً لالتقاط الأوامر بسلاسة بدون انقطاع", "Keeps audio hardware open continuously for seamless hands-free capture"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (keepMicOpenContinuously) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = keepMicOpenContinuously,
+                            onCheckedChange = {
+                                keepMicOpenContinuously = it
+                                viewModel.updateAssistantConfig(config.copy(keepMicOpenContinuously = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_keep_mic_open")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 4. Hands-Free Auto-Listening Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("الاستماع التلقائي الدائم فور تشغيل التطبيق", "Hands-Free Auto-Listening on Open"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("الهاتف يستمع وينفذ الأوامر مباشرة دون لمس أي زر", "Listens and executes commands immediately without touching"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autoContinuousListening,
+                            onCheckedChange = {
+                                autoContinuousListening = it
+                                viewModel.updateAssistantConfig(config.copy(autoContinuousListening = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_auto_continuous_listening")
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Background Execution & Services Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("background_service_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = s("خدمات الخلفية وتوفير الطاقة", "Background Services & Power"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = PolishTextPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("تشغيل المساعد كخدمة دائمة في الخلفية (Foreground Service)", "Run in Background (Foreground Service)"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("الاستماع وتنفيذ الأوامر حتى لو كان التطبيق مغلقاً أو الشاشة مقفلة", "Executes commands even when app is closed or screen is off"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isBackgroundRunning) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = isBackgroundRunning,
+                            onCheckedChange = {
+                                viewModel.toggleBackgroundService(context)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_background_service")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("مراقبة الشبكة المحلية ومشاركات الشاشة", "Local LAN & Screen Stream Audit"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("أرشفة كافة البيانات والمشاركات والأجهزة المتصلة على نفس شبكة Wi-Fi", "Monitor connected LAN nodes, media streams, and screen shares"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = localNetworkMonitoring,
+                            onCheckedChange = {
+                                localNetworkMonitoring = it
+                                viewModel.updateAssistantConfig(config.copy(localNetworkMonitoringEnabled = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = PolishSecondary,
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_lan_monitoring")
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. Biometric Voiceprint Security Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("voiceprint_security_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(PolishPrimaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Fingerprint,
                                 contentDescription = null,
-                                tint = if (config.voiceprintEnrolled) Color(0xFF10B981) else PolishPrimary,
-                                modifier = Modifier.size(22.dp)
+                                tint = PolishPrimary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column {
                             Text(
                                 text = s("بصمة الصوت البيومترية للمالك", "Owner Biometric Voiceprint"),
                                 style = MaterialTheme.typography.titleMedium,
@@ -251,16 +714,51 @@ fun SettingsScreen(
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = if (config.voiceprintEnrolled) {
-                                    s("البصمة مسجلة ومفعلة ✓ (التحكم مقتصر على صوتك فقط)", "Enrolled & Active ✓ (Actions locked to your voice)")
-                                } else {
-                                    s("غير مسجلة (التطبيق ينفذ الأوامر لأي صوت)", "Not enrolled (Open voice control)")
-                                },
+                                text = s("حماية الهاتف وتنفيذ الأوامر فقط بصوت صاحب الهاتف", "Restricts executive actions strictly to your registered voice"),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (config.voiceprintEnrolled) Color(0xFF10B981) else PolishTextSecondary,
+                                color = PolishTextSecondary,
                                 fontSize = 11.sp
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("التحقق الصوتي البيومتري الإجباري", "Enforce Biometric Voiceprint"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = if (config.voiceprintEnrolled)
+                                    s("البصمة مسجلة ونشطة (أمان 100%)", "Voiceprint enrolled & active")
+                                else
+                                    s("لم يتم تسجيل بصمة صوت المالك بعد", "No voiceprint enrolled"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (config.voiceprintEnrolled) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = biometricVoiceprintEnabled,
+                            onCheckedChange = {
+                                biometricVoiceprintEnabled = it
+                                viewModel.updateAssistantConfig(config.copy(biometricVoiceprintEnabled = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = PolishPrimary,
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_biometric_voiceprint")
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -380,254 +878,7 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Control Mode & Behavior
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("autonomous_control_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
-                border = BorderStroke(1.dp, PolishSurfaceBorder)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = s("نمط التحكم الذاتي وتفويض الأوامر", "Autonomous Executive Controls"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PolishTextPrimary
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Continuous Open Microphone (No Repeated Open/Close)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("إبقاء المايك مفتوحاً باستمرار (دون فتح وإغلاق متكرر)", "Continuous Open Microphone (No cycling)"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = s("استمرار فتح قناة المايك دائماً لالتقاط الأوامر بسلاسة بدون انقطاع", "Keeps audio hardware open continuously for seamless hands-free capture"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (keepMicOpenContinuously) Color(0xFF10B981) else PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = keepMicOpenContinuously,
-                            onCheckedChange = {
-                                keepMicOpenContinuously = it
-                                viewModel.updateAssistantConfig(config.copy(keepMicOpenContinuously = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_keep_mic_open")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Hands-Free Auto-Listening Switch
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("الاستماع الدائم التلقائي فور فتح التطبيق", "Hands-Free Auto-Listening on Open"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = s("الهاتف يستمع وينفذ الأوامر مباشرة دون لمس أي زر", "Listens and executes commands immediately without touching"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = autoContinuousListening,
-                            onCheckedChange = {
-                                autoContinuousListening = it
-                                viewModel.updateAssistantConfig(config.copy(autoContinuousListening = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_auto_continuous_listening")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Mute All App Sounds & Audio Switch
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("كتم وتوقيف كافة أصوات التطبيق", "Mute All App Sounds & Audio"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = if (muteAllAppSounds)
-                                    s("تم كتم كافة الأصوات والردود الصوتية ليعمل التطبيق بصمت تام ✓", "All TTS speech and sounds muted for total silent operation ✓")
-                                else
-                                    s("أصوات التطبيق والردود الصوتية مفعلة", "App sounds and voice feedback are enabled"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (muteAllAppSounds) Color(0xFF10B981) else PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = muteAllAppSounds,
-                            onCheckedChange = {
-                                muteAllAppSounds = it
-                                viewModel.updateAssistantConfig(config.copy(muteAllAppSounds = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_mute_all_sounds")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Silent Execution (Disable speech)
-                    val isBackgroundRunning by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("تشغيل المساعد كخدمة دائمة في الخلفية (Foreground Service)", "Run in Background (Foreground Service)"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = s("الاستماع وتنفيذ الأوامر حتى لو كان التطبيق مغلقاً أو الشاشة مقفلة", "Executes commands even when app is closed or screen is off"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isBackgroundRunning) Color(0xFF10B981) else PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = isBackgroundRunning,
-                            onCheckedChange = {
-                                viewModel.toggleBackgroundService(context)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_background_service")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Silent Execution (Disable speech)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("الرد الصوتي الناطق (TTS Voice)", "Voice Speech Feedback (TTS)"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = if (!voiceFeedback) s("التنفيذ صامت بالنيابة عنك (موصى به)", "Silent execution (Recommended)") else s("المساعد يتحدث صوتياً", "Assistant speaks response aloud"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (!voiceFeedback) Color(0xFF10B981) else PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = voiceFeedback,
-                            onCheckedChange = {
-                                voiceFeedback = it
-                                viewModel.updateAssistantConfig(config.copy(voiceFeedbackEnabled = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = PolishPrimary,
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_voice_feedback")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Local Network Monitoring Switch
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = s("مراقبة الشبكة المحلية ومشاركات الشاشة", "Local LAN & Screen Stream Audit"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                            Text(
-                                text = s("أرشفة كافة البيانات والمشاركات والأجهزة المتصلة على نفس شبكة Wi-Fi", "Monitor connected LAN nodes, media streams, and screen shares"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = localNetworkMonitoring,
-                            onCheckedChange = {
-                                localNetworkMonitoring = it
-                                viewModel.updateAssistantConfig(config.copy(localNetworkMonitoringEnabled = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = PolishSecondary,
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_lan_monitoring")
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. AI Persona & Identity Card
+        // 5. AI Persona & Identity Card
         item {
             Card(
                 modifier = Modifier
@@ -659,79 +910,59 @@ fun SettingsScreen(
                         onValueChange = { assistantNameInput = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("assistant_name_input"),
-                        shape = RoundedCornerShape(16.dp),
+                            .testTag("input_assistant_name"),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = PolishSurface,
-                            unfocusedContainerColor = PolishSurface,
                             focusedBorderColor = PolishPrimary,
                             unfocusedBorderColor = PolishSurfaceBorder,
                             focusedTextColor = PolishTextPrimary,
                             unfocusedTextColor = PolishTextPrimary
-                        ),
-                        singleLine = true
+                        )
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = s("اللهجة واللغة المفضلة:", "Preferred Dialect:"),
+                        text = s("اللهجة المفضلة للاستجابة:", "Preferred Dialect:"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishTextSecondary,
                         fontSize = 12.sp
                     )
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    Box {
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(14.dp),
                             color = PolishSurface,
                             border = BorderStroke(1.dp, PolishSurfaceBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { dialectDropdownExpanded = true }
-                                .padding(vertical = 4.dp)
-                                .testTag("dialect_picker_trigger")
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
+                                modifier = Modifier.padding(14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = selectedDialect,
-                                    color = PolishTextPrimary,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    fontSize = 13.sp,
+                                    color = PolishTextPrimary
                                 )
-                                Text(
-                                    text = s("تغيير ▼", "Change ▼"),
-                                    color = PolishPrimary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text(text = "▼", fontSize = 10.sp, color = PolishTextSecondary)
                             }
                         }
 
                         DropdownMenu(
                             expanded = dialectDropdownExpanded,
                             onDismissRequest = { dialectDropdownExpanded = false },
-                            modifier = Modifier
-                                .background(PolishSurfaceElevated)
-                                .testTag("dialect_dropdown_menu")
+                            modifier = Modifier.background(PolishSurfaceElevated)
                         ) {
-                            dialectOptions.forEach { dialect ->
+                            dialectOptions.forEach { opt ->
                                 DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = dialect,
-                                            color = if (dialect == selectedDialect) PolishPrimary else PolishTextPrimary,
-                                            fontWeight = if (dialect == selectedDialect) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
+                                    text = { Text(opt, color = PolishTextPrimary, fontSize = 13.sp) },
                                     onClick = {
-                                        selectedDialect = dialect
+                                        selectedDialect = opt
                                         dialectDropdownExpanded = false
                                     }
                                 )
@@ -739,77 +970,32 @@ fun SettingsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Button(
                         onClick = {
                             viewModel.updateAssistantConfig(
                                 config.copy(
-                                    assistantName = assistantNameInput.ifBlank { "نور" },
-                                    preferredDialect = selectedDialect,
-                                    voiceFeedbackEnabled = voiceFeedback,
-                                    muteAllAppSounds = muteAllAppSounds,
-                                    keepMicOpenContinuously = keepMicOpenContinuously,
-                                    autoContinuousListening = autoContinuousListening,
-                                    biometricVoiceprintEnabled = biometricVoiceprintEnabled,
-                                    localNetworkMonitoringEnabled = localNetworkMonitoring,
-                                    securityThreatScanAutoAlerts = securityThreatAlerts,
-                                    ttsPitch = speechPitch,
-                                    ttsSpeed = speechSpeed
+                                    assistantName = assistantNameInput.ifBlank { "AURA" },
+                                    preferredDialect = selectedDialect
                                 )
                             )
                         },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("save_identity_button")
+                            .height(44.dp)
+                            .testTag("btn_save_persona"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = s("حفظ إعدادات الهوية والتحكم", "Save Assistant Configuration"),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(s("حفظ التغييرات", "Save Identity"), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-    }
-}
-
-@Composable
-private fun LanguageOptionButton(
-    title: String,
-    isSelected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) PolishPrimary.copy(alpha = 0.2f) else PolishSurface,
-        border = BorderStroke(1.dp, if (isSelected) PolishPrimary else PolishSurfaceBorder),
-        modifier = modifier.height(44.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) PolishPrimary else PolishTextSecondary
-            )
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }

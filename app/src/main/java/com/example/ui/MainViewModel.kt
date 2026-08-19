@@ -8,6 +8,7 @@ import com.example.data.local.entity.ActionShortcutEntity
 import com.example.data.local.entity.ActionType
 import com.example.data.local.entity.AssistantConfigEntity
 import com.example.data.local.entity.BehaviorInsightEntity
+import com.example.data.local.entity.InstalledAppEntity
 import com.example.data.local.entity.TelemetryLogEntity
 import com.example.data.local.entity.TelemetrySeverity
 import com.example.data.local.entity.TelemetryType
@@ -86,6 +87,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isBackgroundServiceActive: StateFlow<Boolean> = com.example.service.AssistantForegroundService.isServiceRunning
     val lastBackgroundStatus: StateFlow<String?> = com.example.service.AssistantForegroundService.lastBackgroundActionStatus
 
+    // Accessibility Service State for Autonomous UI Interactions
+    val isAccessibilityConnected: StateFlow<Boolean> = com.example.service.AuraAccessibilityService.isServiceConnected
+
     // Data from Room
     val telemetryLogs: StateFlow<List<TelemetryLogEntity>> = repository.telemetryLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -103,6 +107,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val voiceprints: StateFlow<List<VoiceprintEntity>> = repository.voiceprints
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Installed Applications AI Knowledge Base
+    val indexedApps: StateFlow<List<InstalledAppEntity>> = auraApp.appKnowledgeManager.allIndexedApps
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val isIndexingApps: StateFlow<Boolean> = auraApp.appKnowledgeManager.isIndexing
+    val indexedAppsCount: StateFlow<Int> = auraApp.appKnowledgeManager.indexedCount
 
     // Active Language
     private val _appLanguage = MutableStateFlow("system")
@@ -191,9 +201,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     voiceEngine.setLanguage(cfg.appLanguage)
                 }
                 voiceEngine.setMuteAllSounds(cfg.muteAllAppSounds)
+                voiceEngine.setMuteMicBleepsAndSystemSounds(cfg.muteMicBleepsAndSystemSounds)
                 voiceEngine.setKeepMicContinuouslyOpen(cfg.keepMicOpenContinuously)
             }
         }
+    }
+
+    fun toggleMuteMicBleeps() {
+        viewModelScope.launch {
+            val current = assistantConfig.value
+            val updated = !current.muteMicBleepsAndSystemSounds
+            repository.updateConfig(current.copy(muteMicBleepsAndSystemSounds = updated))
+            val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+            _systemStatusNotice.value = if (updated) {
+                if (isAr) "تم كتم أصوات فتح وإغلاق المايك وأصوات النظام 🔇" else "Mic open/close bleeps & system chimes muted 🔇"
+            } else {
+                if (isAr) "تم تفعيل أصوات فتح المايك والنظام 🔊" else "Mic chimes and system sounds unmuted 🔊"
+            }
+        }
+    }
+
+    fun toggleAutonomousUiInteractions() {
+        viewModelScope.launch {
+            val current = assistantConfig.value
+            val updated = !current.autonomousUiInteractions
+            repository.updateConfig(current.copy(autonomousUiInteractions = updated))
+            val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+            _systemStatusNotice.value = if (updated) {
+                if (isAr) "تم تفعيل التحكم الذاتي والتنقل بين التطبيقات 🤖" else "Autonomous UI automation active 🤖"
+            } else {
+                if (isAr) "تم تعطيل التحكم الذاتي في واجهات التطبيقات" else "Autonomous UI automation paused"
+            }
+        }
+    }
+
+    fun openAccessibilitySettings(context: android.content.Context) {
+        com.example.service.AuraAccessibilityService.openAccessibilitySettings(context)
+    }
+
+    fun isAccessibilityEnabledInSystem(context: android.content.Context): Boolean {
+        return com.example.service.AuraAccessibilityService.isAccessibilityEnabled(context)
     }
 
     fun setAppLanguage(lang: String) {
@@ -652,9 +699,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val phrase = voiceprintManager.defaultEnrollmentPhrases.getOrElse(step) { "أنا المالك المعتمد لهذا الهاتف" }
 
         actionEngine.vibratePhone(60L)
-        voiceEngine.startListening(
+        voiceEngine.startContinuousListening(
             language = _appLanguage.value,
-            onResult = { recordedText ->
+            onResult = { recordedText: String, _: List<Float> ->
                 _isRecordingEnrollment.value = false
                 viewModelScope.launch {
                     val levels = voiceEngine.recentRmsBuffer.toList()
@@ -682,7 +729,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             },
-            onError = { error ->
+            onError = { error: String ->
                 _isRecordingEnrollment.value = false
                 _systemStatusNotice.value = "Error: $error"
             }
@@ -747,6 +794,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.saveShortcut(shortcut)
             _systemStatusNotice.value = "Shortcut added."
+        }
+    }
+
+    fun refreshInstalledAppsCatalog() {
+        viewModelScope.launch {
+            val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+            _systemStatusNotice.value = if (isAr) "جاري مسح وفهرسة كافة تطبيقات الهاتف وتدريب الذكاء الاصطناعي عليها..." else "Scanning and indexing all device applications for AI automation..."
+            val apps = auraApp.appKnowledgeManager.scanAndIndexAllInstalledApps()
+            _systemStatusNotice.value = if (isAr) "تمت فهرسة وفهم ${apps.size} تطبيق بنجاح وتجهيز أوامرها الصوتية!" else "Indexed and learned ${apps.size} apps for voice execution!"
         }
     }
 

@@ -14,9 +14,11 @@ data class AssistantConfigEntity(
     val autoListeningSensitivity: Float = 0.85f,
     val ttsPitch: Float = 1.0f,
     val ttsSpeed: Float = 1.0f,
-    val voiceFeedbackEnabled: Boolean = false, // User requested silent execution by default
-    val muteAllAppSounds: Boolean = true, // Completely mute all TTS speech, sounds and audio effects from the app
-    val keepMicOpenContinuously: Boolean = true, // Keep microphone continuously open without repeated open/close cycles
+    val voiceFeedbackEnabled: Boolean = false, // Voice response speech
+    val muteAllAppSounds: Boolean = true, // Completely mute all TTS speech, sounds and audio effects
+    val muteMicBleepsAndSystemSounds: Boolean = true, // Completely silence mic open/close chimes and phone bleeps
+    val autonomousUiInteractions: Boolean = true, // Autonomous direct typing, sending and screen navigation via Accessibility
+    val keepMicOpenContinuously: Boolean = true, // Keep microphone continuously open without open/close cycles
     val autoContinuousListening: Boolean = true, // Hands-free auto listening on app launch
     val biometricVoiceprintEnabled: Boolean = true, // User voiceprint biometric security
     val voiceprintEnrolled: Boolean = false,
@@ -29,5 +31,8 @@ data class AssistantConfigEntity(
     val backgroundServiceEnabled: Boolean = true,
     val shakeGestureActionEnabled: Boolean = true,
     val speechEngineMode: String = "auto", // "auto", "system", "embedded"
+    val customWakeWord: String = "أورا", // e.g. "أورا", "Aura", "يا مساعد", "يا ذكاء"
+    val wakeWordOnlyMode: Boolean = false, // When true, require wake word calling; when false, always-active
+    val wakeWordSensitivity: Float = 0.85f,
     val lastAuditTimestamp: Long = System.currentTimeMillis()
 )

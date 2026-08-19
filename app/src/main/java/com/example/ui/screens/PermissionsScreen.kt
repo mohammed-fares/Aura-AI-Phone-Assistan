@@ -21,7 +21,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,8 +65,10 @@ fun PermissionsScreen(
     onRequestAllPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val permissions by viewModel.permissionsState.collectAsStateWithLifecycle()
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isAccessibilityConnected by viewModel.isAccessibilityConnected.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -186,6 +191,71 @@ fun PermissionsScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
+                    }
+                }
+            }
+        }
+
+        // Accessibility Service (Autonomous UI Automation) Permission Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("accessibility_permission_card"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, if (isAccessibilityConnected) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFFF59E0B).copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isAccessibilityConnected) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TouchApp,
+                                    contentDescription = null,
+                                    tint = if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = s("خدمة إمكانية الوصول والتنفيذ الذاتي", "Accessibility & Autonomous Service"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PolishTextPrimary
+                                )
+                                Text(
+                                    text = if (isAccessibilityConnected) s("مفعلة وتعمل بنجاح ✓", "Enabled & Active ✓") else s("مطلوبة لكتابة الرسائل والنقر في التطبيقات", "Required for typing & clicking in apps"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.openAccessibilitySettings(context) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isAccessibilityConnected) Color(0xFF10B981) else Color(0xFFF59E0B)
+                            ),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isAccessibilityConnected) s("مفعلة", "Active") else s("تفعيل", "Enable"), fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

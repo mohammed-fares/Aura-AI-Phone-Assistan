@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Aura AI</string>
+    <string name="accessibility_service_description">خدمة التحكم الذاتي والتنفيذ الفوري للأوامر الصوتية: كتابة الرسائل، الضغط التلقائي، التنقل بين التطبيقات والعودة للشاشة الرئيسية دون لمس الهاتف.</string>
 </resources>

@@ -6,12 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.data.local.dao.ConfigDao
 import com.example.data.local.dao.InsightDao
+import com.example.data.local.dao.InstalledAppDao
 import com.example.data.local.dao.ShortcutDao
 import com.example.data.local.dao.TelemetryDao
 import com.example.data.local.dao.VoiceprintDao
 import com.example.data.local.entity.ActionShortcutEntity
 import com.example.data.local.entity.AssistantConfigEntity
 import com.example.data.local.entity.BehaviorInsightEntity
+import com.example.data.local.entity.InstalledAppEntity
 import com.example.data.local.entity.TelemetryLogEntity
 import com.example.data.local.entity.VoiceprintEntity
 
@@ -21,9 +23,10 @@ import com.example.data.local.entity.VoiceprintEntity
         ActionShortcutEntity::class,
         BehaviorInsightEntity::class,
         AssistantConfigEntity::class,
-        VoiceprintEntity::class
+        VoiceprintEntity::class,
+        InstalledAppEntity::class
     ],
-    version = 3,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun insightDao(): InsightDao
     abstract fun configDao(): ConfigDao
     abstract fun voiceprintDao(): VoiceprintDao
+    abstract fun installedAppDao(): InstalledAppDao
 
     companion object {
         @Volatile
@@ -43,7 +47,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aura_assistant_db"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

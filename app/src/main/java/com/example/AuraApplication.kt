@@ -5,8 +5,13 @@ import com.example.data.local.AppDatabase
 import com.example.data.remote.GeminiService
 import com.example.data.repository.AssistantRepository
 import com.example.system.ActionExecutionEngine
+import com.example.system.AppKnowledgeManager
 import com.example.system.DeviceTelemetryManager
+import com.example.system.LocalNetworkMonitor
+import com.example.system.SecurityScanEngine
 import com.example.system.VoiceSpeechEngine
+import com.example.system.VoiceprintManager
+import com.example.system.WakeWordManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,14 +27,17 @@ class AuraApplication : Application() {
     val telemetryManager by lazy { DeviceTelemetryManager(this) }
     val voiceSpeechEngine by lazy { VoiceSpeechEngine(this) }
     val actionExecutionEngine by lazy { ActionExecutionEngine(this) }
-    val voiceprintManager by lazy { com.example.system.VoiceprintManager(this, database.voiceprintDao()) }
-    val securityScanEngine by lazy { com.example.system.SecurityScanEngine(this) }
-    val localNetworkMonitor by lazy { com.example.system.LocalNetworkMonitor(this) }
+    val voiceprintManager by lazy { VoiceprintManager(this, database.voiceprintDao()) }
+    val securityScanEngine by lazy { SecurityScanEngine(this) }
+    val localNetworkMonitor by lazy { LocalNetworkMonitor(this) }
+    val appKnowledgeManager by lazy { AppKnowledgeManager(this, database.installedAppDao()) }
+    val wakeWordManager by lazy { WakeWordManager() }
 
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {
             repository.seedInitialDataIfEmpty()
+            appKnowledgeManager.scanAndIndexAllInstalledApps()
         }
     }
 }

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -109,6 +110,7 @@ fun VoiceAssistantScreen(
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
     val isUsingFallback by viewModel.voiceEngine.isUsingFallbackAcousticEngine.collectAsStateWithLifecycle()
     val activeExecutionPlan by viewModel.activeExecutionPlan.collectAsStateWithLifecycle()
+    val isAccessibilityConnected by viewModel.isAccessibilityConnected.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -260,6 +262,41 @@ fun VoiceAssistantScreen(
                         text = if (config.muteAllAppSounds) s("أصوات مكتومة 🔇", "Sounds Muted 🔇") else s("صوت مفعّل 🔊", "Sound Active 🔊"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (config.muteAllAppSounds) Color(0xFFEF4444) else PolishTextSecondary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            // Accessibility Automation Quick Status Pill
+            Surface(
+                onClick = {
+                    if (!isAccessibilityConnected) {
+                        viewModel.openAccessibilitySettings(context)
+                    } else {
+                        viewModel.toggleAutonomousUiInteractions()
+                    }
+                },
+                shape = RoundedCornerShape(20.dp),
+                color = if (isAccessibilityConnected && config.autonomousUiInteractions) Color(0xFF10B981).copy(alpha = 0.15f) else PolishSurfaceElevated,
+                border = BorderStroke(1.dp, if (isAccessibilityConnected && config.autonomousUiInteractions) Color(0xFF10B981).copy(alpha = 0.5f) else PolishSurfaceBorder),
+                modifier = Modifier.testTag("pill_accessibility_status")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TouchApp,
+                        contentDescription = "Autonomous Access",
+                        tint = if (isAccessibilityConnected && config.autonomousUiInteractions) Color(0xFF10B981) else PolishTextSecondary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isAccessibilityConnected && config.autonomousUiInteractions) s("تحكم ذاتي 🤖", "Auto UI 🤖") else s("تحكم يدوي", "Manual UI"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isAccessibilityConnected && config.autonomousUiInteractions) Color(0xFF10B981) else PolishTextSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )

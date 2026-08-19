@@ -3,7 +3,6 @@ package com.example.system
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.media.AudioManager
@@ -20,6 +19,7 @@ import android.telecom.TelecomManager
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import com.example.data.local.entity.ActionType
+import com.example.service.AuraAccessibilityService
 import com.example.util.LocalizationManager
 
 class ActionExecutionEngine(private val context: Context) {
@@ -32,10 +32,87 @@ class ActionExecutionEngine(private val context: Context) {
         language: String = "system",
         onFeedback: (String) -> Unit
     ) {
-        vibratePhone()
+        vibratePhone(60L)
         val isAr = LocalizationManager.getEffectiveLanguage(language) == "ar"
+        val accessibility = AuraAccessibilityService.instance
 
         when (actionType) {
+            ActionType.SEND_MESSAGE -> {
+                val input = payload?.trim() ?: ""
+                var targetContact = ""
+                var messageBody = input
+
+                // Parse if payload contains recipient and message separated by delimiter
+                if (input.contains(":") || input.contains("->") || input.contains("|")) {
+                    val parts = input.split(Regex("[:->|]"), limit = 2)
+                    targetContact = parts[0].trim()
+                    messageBody = parts.getOrNull(1)?.trim() ?: ""
+                }
+
+                val resolvedNumber = if (targetContact.isNotBlank()) {
+                    resolveContactNumber(targetContact) ?: targetContact
+                } else ""
+
+                // Check if user specifically requested WhatsApp in payload or command
+                val isWhatsApp = input.contains("واتساب", ignoreCase = true) || input.contains("whatsapp", ignoreCase = true)
+
+                if (isWhatsApp && accessibility != null) {
+                    accessibility.dispatchAutonomousWhatsApp(resolvedNumber, messageBody, autoReturnHome = true) { status ->
+                        onFeedback(status)
+                    }
+                    return
+                }
+
+                // Autonomous full UI execution via Accessibility Service
+                if (accessibility != null) {
+                    accessibility.dispatchAutonomousSms(resolvedNumber, messageBody, autoReturnHome = true) { status ->
+                        onFeedback(status)
+                    }
+                    return
+                }
+
+                // Fast Direct SMS if permission granted
+                val hasSmsPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.SEND_SMS
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasSmsPermission && resolvedNumber.isNotBlank() && messageBody.isNotBlank()) {
+                    try {
+                        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            context.getSystemService(SmsManager::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            SmsManager.getDefault()
+                        }
+                        smsManager.sendTextMessage(resolvedNumber, null, messageBody, null, null)
+                        onFeedback(
+                            if (isAr) "تم إرسال الرسالة النصية بنجاح إلى: $targetContact ($resolvedNumber) ✉️"
+                            else "SMS sent successfully to: $targetContact ($resolvedNumber) ✉️"
+                        )
+                        return
+                    } catch (e: Exception) {
+                        // fallback to intent
+                    }
+                }
+
+                // Standard Intent Launcher fallback
+                try {
+                    val sendIntent = Intent(Intent.ACTION_SENDTO).apply {
+                        data = if (resolvedNumber.isNotBlank()) Uri.parse("smsto:${Uri.encode(resolvedNumber)}") else Uri.parse("smsto:")
+                        putExtra("sms_body", messageBody.ifBlank { "مرحباً" })
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(sendIntent)
+                    onFeedback(
+                        if (isAr) "تم فتح واجهة الرسائل وتجهيز النص للإرسال ✉️"
+                        else "SMS composer launched with prepared text ✉️"
+                    )
+                } catch (e: Exception) {
+                    onFeedback(if (isAr) "تم تجهيز الرسالة: $messageBody" else "Message prepared: $messageBody")
+                }
+            }
+
             ActionType.CALL_CONTACT -> {
                 val targetQuery = payload?.trim()?.ifBlank { "0000000" } ?: "0000000"
                 val resolvedNumber = resolveContactNumber(targetQuery) ?: targetQuery
@@ -94,15 +171,18 @@ class ActionExecutionEngine(private val context: Context) {
                     audioManager?.mode = AudioManager.MODE_NORMAL
                     audioManager?.isSpeakerphoneOn = false
 
-                    // Return home to dismiss in-call screen
-                    try {
+                    // If accessibility service is connected, click end call buttons or return home
+                    if (accessibility != null) {
+                        accessibility.performClickOnNode(listOf("إنهاء", "انهاء", "End", "Hang up", "Disconnect")) {
+                            // clicked
+                        }
+                        accessibility.navigateHome()
+                    } else {
                         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                             addCategory(Intent.CATEGORY_HOME)
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(homeIntent)
-                    } catch (e: Exception) {
-                        // ignore
                     }
 
                     onFeedback(
@@ -114,75 +194,27 @@ class ActionExecutionEngine(private val context: Context) {
                 }
             }
 
-            ActionType.SEND_MESSAGE -> {
-                val input = payload?.trim() ?: ""
-                var targetContact = ""
-                var messageBody = input
-
-                // Parse if payload contains recipient and message separated by delimiter
-                if (input.contains(":") || input.contains("->") || input.contains("|")) {
-                    val parts = input.split(Regex("[:->|]"), limit = 2)
-                    targetContact = parts[0].trim()
-                    messageBody = parts.getOrNull(1)?.trim() ?: ""
-                }
-
-                val resolvedNumber = if (targetContact.isNotBlank()) {
-                    resolveContactNumber(targetContact) ?: targetContact
-                } else ""
-
-                val hasSmsPermission = ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.SEND_SMS
-                ) == PackageManager.PERMISSION_GRANTED
-
-                if (hasSmsPermission && resolvedNumber.isNotBlank() && messageBody.isNotBlank()) {
-                    try {
-                        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            context.getSystemService(SmsManager::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            SmsManager.getDefault()
-                        }
-                        smsManager.sendTextMessage(resolvedNumber, null, messageBody, null, null)
-                        onFeedback(
-                            if (isAr) "تم إرسال الرسالة النصية بنجاح إلى: $targetContact ($resolvedNumber) ✉️"
-                            else "SMS sent successfully to: $targetContact ($resolvedNumber) ✉️"
-                        )
-                        return
-                    } catch (e: Exception) {
-                        // fallback to intent
-                    }
-                }
-
-                try {
-                    val sendIntent = Intent(Intent.ACTION_SENDTO).apply {
-                        data = if (resolvedNumber.isNotBlank()) Uri.parse("smsto:${Uri.encode(resolvedNumber)}") else Uri.parse("smsto:")
-                        putExtra("sms_body", messageBody.ifBlank { "مرحباً، تم إرسال هذه الرسالة عبر المساعد الصوتي" })
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    context.startActivity(sendIntent)
-                    onFeedback(
-                        if (isAr) "تم فتح واجهة الرسائل القصيرة وتجهيز النص للإرسال ✉️"
-                        else "SMS composer launched with prepared text ✉️"
-                    )
-                } catch (e: Exception) {
-                    onFeedback(if (isAr) "تم تجهيز الرسالة: $messageBody" else "Message prepared: $messageBody")
-                }
-            }
-
             ActionType.CLOSE_APP, ActionType.RETURN_HOME -> {
-                try {
-                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
-                    context.startActivity(homeIntent)
+                if (accessibility != null) {
+                    accessibility.navigateHome()
                     onFeedback(
-                        if (isAr) "تم إغلاق الواجهة والعودة للشاشة الرئيسية للهاتف 🏠"
+                        if (isAr) "تم إغلاق التطبيقات والعودة للشاشة الرئيسية للهاتف 🏠"
                         else "Returned to Home screen and closed active view 🏠"
                     )
-                } catch (e: Exception) {
-                    onFeedback(if (isAr) "تم الرجوع للشاشة الرئيسية" else "Returned to Home")
+                } else {
+                    try {
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        context.startActivity(homeIntent)
+                        onFeedback(
+                            if (isAr) "تم إغلاق الواجهة والعودة للشاشة الرئيسية للهاتف 🏠"
+                            else "Returned to Home screen and closed active view 🏠"
+                        )
+                    } catch (e: Exception) {
+                        onFeedback(if (isAr) "تم الرجوع للشاشة الرئيسية" else "Returned to Home")
+                    }
                 }
             }
 
@@ -205,7 +237,6 @@ class ActionExecutionEngine(private val context: Context) {
                         query.contains("إعدادات") || query.contains("اعدادات") || query.contains("settings") -> executeAction(ActionType.OPEN_SETTINGS, payload, language, onFeedback)
                         query.contains("ساعة") || query.contains("منبه") || query.contains("clock") || query.contains("alarm") -> executeAction(ActionType.SET_ALARM, payload, language, onFeedback)
                         else -> {
-                            // Launch web/store search so the user request is always fulfilled
                             try {
                                 val searchIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(query)}")).apply {
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -611,7 +642,6 @@ class ActionExecutionEngine(private val context: Context) {
         val pm = context.packageManager
         val cleanQuery = query.lowercase().trim()
 
-        // 1. Comprehensive package dictionary for popular apps (Arabic & English)
         val knownPackages = mapOf(
             "واتساب" to "com.whatsapp",
             "الواتساب" to "com.whatsapp",
@@ -703,12 +733,11 @@ class ActionExecutionEngine(private val context: Context) {
                         return key
                     }
                 } catch (e: Exception) {
-                    // continue search
+                    // continue
                 }
             }
         }
 
-        // 2. Query all installed launchable applications on the phone
         try {
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)

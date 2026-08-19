@@ -71,6 +71,7 @@ import com.example.system.LocalShareEvent
 import com.example.system.ScreenActivityEvent
 import com.example.ui.MainViewModel
 import com.example.ui.components.ActionShortcutCard
+import com.example.ui.components.InstalledAppsKnowledgeCard
 import com.example.ui.components.MetricGaugeCard
 import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishPrimary
@@ -100,6 +101,8 @@ fun DashboardScreen(
     val isAuditing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
     val netTelemetry by viewModel.networkTelemetry.collectAsStateWithLifecycle()
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val indexedApps by viewModel.indexedApps.collectAsStateWithLifecycle()
+    val isIndexingApps by viewModel.isIndexingApps.collectAsStateWithLifecycle()
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
 
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -291,6 +294,17 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
+        // AI Installed Applications Intelligence Hub
+        item {
+            InstalledAppsKnowledgeCard(
+                apps = indexedApps,
+                isIndexing = isIndexingApps,
+                isAr = isAr,
+                onRefreshApps = { viewModel.refreshInstalledAppsCatalog() },
+                onLaunchApp = { pkg -> viewModel.executeAction(ActionType.OPEN_APP, pkg) }
+            )
         }
 
         // Live Telemetry Gauges Grid
