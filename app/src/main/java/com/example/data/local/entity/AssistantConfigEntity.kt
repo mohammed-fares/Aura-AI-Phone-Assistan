@@ -15,6 +15,8 @@ data class AssistantConfigEntity(
     val ttsPitch: Float = 1.0f,
     val ttsSpeed: Float = 1.0f,
     val voiceFeedbackEnabled: Boolean = false, // User requested silent execution by default
+    val muteAllAppSounds: Boolean = true, // Completely mute all TTS speech, sounds and audio effects from the app
+    val keepMicOpenContinuously: Boolean = true, // Keep microphone continuously open without repeated open/close cycles
     val autoContinuousListening: Boolean = true, // Hands-free auto listening on app launch
     val biometricVoiceprintEnabled: Boolean = true, // User voiceprint biometric security
     val voiceprintEnrolled: Boolean = false,

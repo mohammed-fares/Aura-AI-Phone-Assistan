@@ -190,6 +190,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _appLanguage.value = cfg.appLanguage
                     voiceEngine.setLanguage(cfg.appLanguage)
                 }
+                voiceEngine.setMuteAllSounds(cfg.muteAllAppSounds)
+                voiceEngine.setKeepMicContinuouslyOpen(cfg.keepMicOpenContinuously)
             }
         }
     }
@@ -403,9 +405,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // 2. Parse command via AI
+            // 2. Parse command via AI with multi-layer fallback
             try {
-                val parsed = repository.processVoiceCommand(rawInput)
+                var parsed = repository.processVoiceCommand(rawInput)
+                if (parsed.actionType == null) {
+                    val fallback = auraApp.geminiService.fallbackLocalInterpreter(rawInput, config.assistantName)
+                    if (fallback.actionType != null) {
+                        parsed = fallback
+                    }
+                }
+
                 val assistantMsg = ConversationMessage(
                     text = parsed.responseSpeechText,
                     isUser = false,
@@ -417,7 +426,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _conversation.value = _conversation.value + assistantMsg
 
-                if (config.voiceFeedbackEnabled) {
+                if (config.voiceFeedbackEnabled && !config.muteAllAppSounds) {
                     voiceEngine.speak(
                         text = parsed.responseSpeechText,
                         pitch = config.ttsPitch,
@@ -447,7 +456,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val plan = buildExecutionPlan(actionType, payload)
             _activeExecutionPlan.value = plan
 
-            // Animate through each autonomous step
+            // Animate through each autonomous step with snappy responsive feedback
             for (index in plan.steps.indices) {
                 val updatedSteps = plan.steps.mapIndexed { i, s ->
                     when {
@@ -460,8 +469,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     steps = updatedSteps,
                     currentStepIndex = index
                 )
-                actionEngine.vibratePhone(40L)
-                delay(400L)
+                actionEngine.vibratePhone(25L)
+                delay(120L)
             }
 
             // Final step: trigger real OS action
@@ -710,7 +719,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     actionType = ActionType.AI_SUMMARIZE_ACTIVITY
                 )
                 _conversation.value = _conversation.value + auditMsg
-                if (assistantConfig.value.voiceFeedbackEnabled) {
+                if (assistantConfig.value.voiceFeedbackEnabled && !assistantConfig.value.muteAllAppSounds) {
                     voiceEngine.speak(result.healthSummary)
                 }
             } catch (e: Exception) {

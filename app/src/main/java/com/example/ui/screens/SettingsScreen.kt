@@ -98,6 +98,8 @@ fun SettingsScreen(
     var dialectDropdownExpanded by remember { mutableStateOf(false) }
 
     var voiceFeedback by remember(config.voiceFeedbackEnabled) { mutableStateOf(config.voiceFeedbackEnabled) }
+    var muteAllAppSounds by remember(config.muteAllAppSounds) { mutableStateOf(config.muteAllAppSounds) }
+    var keepMicOpenContinuously by remember(config.keepMicOpenContinuously) { mutableStateOf(config.keepMicOpenContinuously) }
     var autoContinuousListening by remember(config.autoContinuousListening) { mutableStateOf(config.autoContinuousListening) }
     var biometricVoiceprintEnabled by remember(config.biometricVoiceprintEnabled) { mutableStateOf(config.biometricVoiceprintEnabled) }
     var securityThreatAlerts by remember(config.securityThreatScanAutoAlerts) { mutableStateOf(config.securityThreatScanAutoAlerts) }
@@ -398,6 +400,43 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    // Continuous Open Microphone (No Repeated Open/Close)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("إبقاء المايك مفتوحاً باستمرار (دون فتح وإغلاق متكرر)", "Continuous Open Microphone (No cycling)"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("استمرار فتح قناة المايك دائماً لالتقاط الأوامر بسلاسة بدون انقطاع", "Keeps audio hardware open continuously for seamless hands-free capture"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (keepMicOpenContinuously) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = keepMicOpenContinuously,
+                            onCheckedChange = {
+                                keepMicOpenContinuously = it
+                                viewModel.updateAssistantConfig(config.copy(keepMicOpenContinuously = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_keep_mic_open")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     // Hands-Free Auto-Listening Switch
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -435,7 +474,47 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Persistent Background Foreground Service
+                    // Mute All App Sounds & Audio Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("كتم وتوقيف كافة أصوات التطبيق", "Mute All App Sounds & Audio"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = if (muteAllAppSounds)
+                                    s("تم كتم كافة الأصوات والردود الصوتية ليعمل التطبيق بصمت تام ✓", "All TTS speech and sounds muted for total silent operation ✓")
+                                else
+                                    s("أصوات التطبيق والردود الصوتية مفعلة", "App sounds and voice feedback are enabled"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (muteAllAppSounds) Color(0xFF10B981) else PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = muteAllAppSounds,
+                            onCheckedChange = {
+                                muteAllAppSounds = it
+                                viewModel.updateAssistantConfig(config.copy(muteAllAppSounds = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_mute_all_sounds")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Silent Execution (Disable speech)
                     val isBackgroundRunning by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
                     val context = androidx.compose.ui.platform.LocalContext.current
                     Row(
@@ -669,6 +748,8 @@ fun SettingsScreen(
                                     assistantName = assistantNameInput.ifBlank { "نور" },
                                     preferredDialect = selectedDialect,
                                     voiceFeedbackEnabled = voiceFeedback,
+                                    muteAllAppSounds = muteAllAppSounds,
+                                    keepMicOpenContinuously = keepMicOpenContinuously,
                                     autoContinuousListening = autoContinuousListening,
                                     biometricVoiceprintEnabled = biometricVoiceprintEnabled,
                                     localNetworkMonitoringEnabled = localNetworkMonitoring,

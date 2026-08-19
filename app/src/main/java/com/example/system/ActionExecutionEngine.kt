@@ -59,8 +59,8 @@ class ActionExecutionEngine(private val context: Context) {
                     }
                     context.startActivity(callIntent)
                     onFeedback(
-                        if (isAr) "تم بدء الاتصال الفعلي بالجهة/الرقم: $targetQuery ($resolvedNumber) 📞"
-                        else "Initiated direct phone call to: $targetQuery ($resolvedNumber) 📞"
+                        if (isAr) "تم بدء الاتصال بالجهة/الرقم: $targetQuery ($resolvedNumber) 📞"
+                        else "Initiated direct call to: $targetQuery ($resolvedNumber) 📞"
                     )
                 } catch (e: Exception) {
                     try {
@@ -70,8 +70,8 @@ class ActionExecutionEngine(private val context: Context) {
                         }
                         context.startActivity(dialIntent)
                         onFeedback(
-                            if (isAr) "تم فتح واجهة الاتصال للرقم: $resolvedNumber"
-                            else "Dialer opened for: $resolvedNumber"
+                            if (isAr) "تم فتح واجهة الاتصال للرقم: $resolvedNumber 📞"
+                            else "Dialer opened for: $resolvedNumber 📞"
                         )
                     } catch (ex: Exception) {
                         onFeedback(if (isAr) "تعذر إتمام الاتصال مباشرة" else "Failed to dispatch call")
@@ -89,10 +89,21 @@ class ActionExecutionEngine(private val context: Context) {
                         }
                     }
 
-                    // Reset audio routing as fallback cleanup
+                    // Reset audio mode
                     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                     audioManager?.mode = AudioManager.MODE_NORMAL
                     audioManager?.isSpeakerphoneOn = false
+
+                    // Return home to dismiss in-call screen
+                    try {
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(homeIntent)
+                    } catch (e: Exception) {
+                        // ignore
+                    }
 
                     onFeedback(
                         if (isAr) "تم إنهاء المكالمة وإغلاق شاشة الاتصال 📵"
@@ -163,11 +174,11 @@ class ActionExecutionEngine(private val context: Context) {
                 try {
                     val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                         addCategory(Intent.CATEGORY_HOME)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     }
                     context.startActivity(homeIntent)
                     onFeedback(
-                        if (isAr) "تم إغلاق التطبيق والعودة للشاشة الرئيسية للهاتف 🏠"
+                        if (isAr) "تم إغلاق الواجهة والعودة للشاشة الرئيسية للهاتف 🏠"
                         else "Returned to Home screen and closed active view 🏠"
                     )
                 } catch (e: Exception) {
@@ -187,15 +198,28 @@ class ActionExecutionEngine(private val context: Context) {
                 } else {
                     // Fallback to matching feature intent
                     when {
-                        query.contains("كاميرا") || query.contains("camera") -> executeAction(ActionType.OPEN_CAMERA, payload, language, onFeedback)
-                        query.contains("استوديو") || query.contains("معرض") || query.contains("gallery") || query.contains("photos") -> executeAction(ActionType.OPEN_GALLERY, payload, language, onFeedback)
+                        query.contains("كاميرا") || query.contains("camera") || query.contains("تصوير") -> executeAction(ActionType.OPEN_CAMERA, payload, language, onFeedback)
+                        query.contains("استوديو") || query.contains("معرض") || query.contains("gallery") || query.contains("photos") || query.contains("صور") -> executeAction(ActionType.OPEN_GALLERY, payload, language, onFeedback)
                         query.contains("حاسبة") || query.contains("calc") -> executeAction(ActionType.OPEN_CALCULATOR, payload, language, onFeedback)
-                        query.contains("خرائط") || query.contains("maps") -> executeAction(ActionType.OPEN_MAPS, payload, language, onFeedback)
-                        query.contains("إعدادات") || query.contains("settings") -> executeAction(ActionType.OPEN_SETTINGS, payload, language, onFeedback)
-                        else -> onFeedback(
-                            if (isAr) "تم البحث عن التطبيق وتشغيله ($payload)"
-                            else "Executed request for app ($payload)"
-                        )
+                        query.contains("خرائط") || query.contains("maps") || query.contains("خريطة") -> executeAction(ActionType.OPEN_MAPS, payload, language, onFeedback)
+                        query.contains("إعدادات") || query.contains("اعدادات") || query.contains("settings") -> executeAction(ActionType.OPEN_SETTINGS, payload, language, onFeedback)
+                        query.contains("ساعة") || query.contains("منبه") || query.contains("clock") || query.contains("alarm") -> executeAction(ActionType.SET_ALARM, payload, language, onFeedback)
+                        else -> {
+                            // Launch web/store search so the user request is always fulfilled
+                            try {
+                                val searchIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(query)}")).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(searchIntent)
+                                onFeedback(if (isAr) "تم فتح متجر التطبيقات للبحث عن: $payload 🚀" else "Searching app store for: $payload 🚀")
+                            } catch (e: Exception) {
+                                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(webIntent)
+                                onFeedback(if (isAr) "تم فتح نتائج البحث عن التطبيق: $payload 🚀" else "App results opened for: $payload 🚀")
+                            }
+                        }
                     }
                 }
             }
@@ -213,7 +237,7 @@ class ActionExecutionEngine(private val context: Context) {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(fallbackCam)
-                        onFeedback(if (isAr) "تم فتح الكاميرا" else "Camera opened")
+                        onFeedback(if (isAr) "تم فتح الكاميرا 📷" else "Camera opened 📷")
                     } catch (ex: Exception) {
                         onFeedback(if (isAr) "تعذر فتح الكاميرا" else "Failed to open camera")
                     }
@@ -245,7 +269,7 @@ class ActionExecutionEngine(private val context: Context) {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(calcIntent)
-                        onFeedback(if (isAr) "تم فتح الآلة الحاسبة" else "Calculator opened")
+                        onFeedback(if (isAr) "تم فتح الآلة الحاسبة 🧮" else "Calculator opened 🧮")
                     } catch (e: Exception) {
                         onFeedback(if (isAr) "تم تشغيل الآلة الحاسبة" else "Calculator launched")
                     }
@@ -279,7 +303,7 @@ class ActionExecutionEngine(private val context: Context) {
                 } else {
                     "support@example.com"
                 }
-                val subject = if (isAr) "رسالة من المساعد الصوتي الذاتي" else "Message via Autonomous Assistant"
+                val subject = if (isAr) "رسالة من المساعد الصوتي" else "Message via Assistant"
                 val body = payload ?: ""
                 try {
                     val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
@@ -324,7 +348,7 @@ class ActionExecutionEngine(private val context: Context) {
             }
 
             ActionType.WEB_SEARCH -> {
-                val query = payload?.trim()?.ifBlank { "Android autonomous assistant" } ?: "Android assistant"
+                val query = payload?.trim()?.ifBlank { "Google" } ?: "Google"
                 try {
                     val searchIntent = Intent(Intent.ACTION_WEB_SEARCH).apply {
                         putExtra(SearchManager.QUERY, query)
@@ -337,7 +361,7 @@ class ActionExecutionEngine(private val context: Context) {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(fallbackIntent)
-                    onFeedback(if (isAr) "تم فتح نتائج البحث عن: $query" else "Search results displayed for: $query")
+                    onFeedback(if (isAr) "تم فتح نتائج البحث عن: $query 🔍" else "Search results displayed for: $query 🔍")
                 }
             }
 
@@ -347,19 +371,19 @@ class ActionExecutionEngine(private val context: Context) {
                     try {
                         val lower = payload?.lowercase() ?: ""
                         when {
-                            lower.contains("ارفع") || lower.contains("up") || lower.contains("زيادة") -> {
+                            lower.contains("ارفع") || lower.contains("up") || lower.contains("زيادة") || lower.contains("علّي") || lower.contains("علي") -> {
                                 audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
                                 onFeedback(if (isAr) "تم رفع مستوى الصوت 🔊" else "Volume increased 🔊")
                             }
-                            lower.contains("اخفض") || lower.contains("down") || lower.contains("تقليل") -> {
+                            lower.contains("اخفض") || lower.contains("down") || lower.contains("تقليل") || lower.contains("قصر") || lower.contains("وطي") || lower.contains("نزل") -> {
                                 audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
                                 onFeedback(if (isAr) "تم خفض مستوى الصوت 🔉" else "Volume decreased 🔉")
                             }
-                            lower.contains("كتم") || lower.contains("mute") || lower.contains("صامت") -> {
+                            lower.contains("كتم") || lower.contains("mute") || lower.contains("صامت") || lower.contains("اكتم") -> {
                                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, AudioManager.FLAG_SHOW_UI)
                                 onFeedback(if (isAr) "تم كتم صوت الوسائط 🔇" else "Media volume muted 🔇")
                             }
-                            lower.contains("أعلى") || lower.contains("max") || lower.contains("100") -> {
+                            lower.contains("أعلى") || lower.contains("اعلى") || lower.contains("max") || lower.contains("100") -> {
                                 val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max, AudioManager.FLAG_SHOW_UI)
                                 onFeedback(if (isAr) "تم ضبط مستوى الصوت على الحد الأقصى 🔊" else "Volume set to maximum 🔊")
@@ -414,7 +438,7 @@ class ActionExecutionEngine(private val context: Context) {
                         onFeedback(if (isAr) "تم إرسال أمر تفعيل الكشاف 🔦" else "Torch signal triggered 🔦")
                     }
                 } catch (e: Exception) {
-                    onFeedback(if (isAr) "تم التحكم بحالة كشاف الهاتف" else "Flashlight toggled")
+                    onFeedback(if (isAr) "تم التحكم بحالة كشاف الهاتف 🔦" else "Flashlight toggled 🔦")
                 }
             }
 
@@ -587,44 +611,90 @@ class ActionExecutionEngine(private val context: Context) {
         val pm = context.packageManager
         val cleanQuery = query.lowercase().trim()
 
-        // 1. Direct package mappings
+        // 1. Comprehensive package dictionary for popular apps (Arabic & English)
         val knownPackages = mapOf(
             "واتساب" to "com.whatsapp",
+            "الواتساب" to "com.whatsapp",
+            "واتس" to "com.whatsapp",
+            "الواتس" to "com.whatsapp",
             "whatsapp" to "com.whatsapp",
+            "whats" to "com.whatsapp",
             "يوتيوب" to "com.google.android.youtube",
+            "اليوتيوب" to "com.google.android.youtube",
             "youtube" to "com.google.android.youtube",
+            "yt" to "com.google.android.youtube",
             "كروم" to "com.android.chrome",
+            "الكروم" to "com.android.chrome",
             "chrome" to "com.android.chrome",
+            "متصفح" to "com.android.chrome",
+            "browser" to "com.android.chrome",
             "تليجرام" to "org.telegram.messenger",
+            "تيليجرام" to "org.telegram.messenger",
+            "التليجرام" to "org.telegram.messenger",
+            "التيليجرام" to "org.telegram.messenger",
             "telegram" to "org.telegram.messenger",
             "انستغرام" to "com.instagram.android",
             "انستقرام" to "com.instagram.android",
+            "الانستقرام" to "com.instagram.android",
+            "الانستغرام" to "com.instagram.android",
+            "انستا" to "com.instagram.android",
             "instagram" to "com.instagram.android",
             "فيسبوك" to "com.facebook.katana",
+            "الفيسبوك" to "com.facebook.katana",
+            "فيس" to "com.facebook.katana",
+            "الفيس" to "com.facebook.katana",
             "facebook" to "com.facebook.katana",
+            "fb" to "com.facebook.katana",
             "تيك توك" to "com.zhiliaoapp.musically",
+            "التيك توك" to "com.zhiliaoapp.musically",
+            "تيكتوك" to "com.zhiliaoapp.musically",
             "tiktok" to "com.zhiliaoapp.musically",
+            "سناب" to "com.snapchat.android",
+            "سناب شات" to "com.snapchat.android",
+            "السناب" to "com.snapchat.android",
+            "snapchat" to "com.snapchat.android",
             "تويتر" to "com.twitter.android",
+            "التويتر" to "com.twitter.android",
+            "اكس" to "com.twitter.android",
             "twitter" to "com.twitter.android",
+            "x" to "com.twitter.android",
             "خرائط" to "com.google.android.apps.maps",
+            "الخرائط" to "com.google.android.apps.maps",
             "maps" to "com.google.android.apps.maps",
             "جيميل" to "com.google.android.gm",
+            "الجيميل" to "com.google.android.gm",
             "gmail" to "com.google.android.gm",
             "حاسبة" to "com.google.android.calculator",
+            "الحاسبة" to "com.google.android.calculator",
+            "آلة حاسبة" to "com.google.android.calculator",
             "calculator" to "com.google.android.calculator",
             "استوديو" to "com.google.android.apps.photos",
+            "الاستوديو" to "com.google.android.apps.photos",
             "معرض" to "com.google.android.apps.photos",
+            "المعرض" to "com.google.android.apps.photos",
             "photos" to "com.google.android.apps.photos",
+            "صور" to "com.google.android.apps.photos",
             "متجر" to "com.android.vending",
+            "المتجر" to "com.android.vending",
+            "بلاي" to "com.android.vending",
             "play" to "com.android.vending",
             "ساعة" to "com.google.android.deskclock",
+            "الساعة" to "com.google.android.deskclock",
+            "منبه" to "com.google.android.deskclock",
             "clock" to "com.google.android.deskclock",
             "ملفات" to "com.google.android.documentsui",
-            "files" to "com.google.android.documentsui"
+            "الملفات" to "com.google.android.documentsui",
+            "files" to "com.google.android.documentsui",
+            "رسائل" to "com.google.android.apps.messaging",
+            "الرسائل" to "com.google.android.apps.messaging",
+            "messages" to "com.google.android.apps.messaging",
+            "ماسنجر" to "com.facebook.orca",
+            "الماسنجر" to "com.facebook.orca",
+            "messenger" to "com.facebook.orca"
         )
 
         for ((key, pkg) in knownPackages) {
-            if (cleanQuery.contains(key)) {
+            if (cleanQuery.contains(key) || key.contains(cleanQuery)) {
                 try {
                     val intent = pm.getLaunchIntentForPackage(pkg)
                     if (intent != null) {
@@ -638,7 +708,7 @@ class ActionExecutionEngine(private val context: Context) {
             }
         }
 
-        // 2. Query all installed launchable applications
+        // 2. Query all installed launchable applications on the phone
         try {
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
@@ -648,7 +718,7 @@ class ActionExecutionEngine(private val context: Context) {
                 val appLabel = info.loadLabel(pm).toString().lowercase()
                 val pkgName = info.activityInfo.packageName.lowercase()
 
-                if (appLabel.contains(cleanQuery) || pkgName.contains(cleanQuery)) {
+                if (appLabel.contains(cleanQuery) || pkgName.contains(cleanQuery) || cleanQuery.contains(appLabel)) {
                     val launchIntent = pm.getLaunchIntentForPackage(info.activityInfo.packageName)
                     if (launchIntent != null) {
                         launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK

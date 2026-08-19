@@ -200,7 +200,7 @@ fun VoiceAssistantScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 2. Hands-Free Banner & Biometric Voiceprint Status
+        // 2. Hands-Free Banner, Sound Status & Biometric Voiceprint Status
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -212,24 +212,56 @@ fun VoiceAssistantScreen(
                 border = BorderStroke(1.dp, if (isListening) Color(0xFF10B981) else PolishSurfaceBorder)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(9.dp)
                             .clip(CircleShape)
                             .background(if (isListening) Color(0xFF10B981) else Color(0xFF94A3B8))
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (isListening) {
-                            if (isUsingFallback) s("استماع عبر المحرك الصوتي المدمج 🎙️", "In-App Acoustic Engine 🎙️")
-                            else s("استماع دائم ونشط (بدون لمس)", "Hands-Free Active (No Touch)")
-                        } else s("الاستماع متوقف مؤقتاً", "Listening Paused"),
+                            if (isUsingFallback) s("استماع مدمج 🎙️", "In-App Acoustic 🎙️")
+                            else s("مايك مستمر 🟢", "Continuous Mic 🟢")
+                        } else s("متوقف", "Paused"),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (isListening) Color(0xFF10B981) else PolishTextPrimary
+                        color = if (isListening) Color(0xFF10B981) else PolishTextPrimary,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            // Quick Mute Status Pill
+            Surface(
+                onClick = {
+                    viewModel.updateAssistantConfig(config.copy(muteAllAppSounds = !config.muteAllAppSounds))
+                },
+                shape = RoundedCornerShape(20.dp),
+                color = if (config.muteAllAppSounds) Color(0xFFEF4444).copy(alpha = 0.15f) else PolishSurfaceElevated,
+                border = BorderStroke(1.dp, if (config.muteAllAppSounds) Color(0xFFEF4444).copy(alpha = 0.5f) else PolishSurfaceBorder),
+                modifier = Modifier.testTag("pill_quick_mute_toggle")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (config.muteAllAppSounds) Icons.Default.VolumeOff else Icons.Default.Settings,
+                        contentDescription = "Sound Status",
+                        tint = if (config.muteAllAppSounds) Color(0xFFEF4444) else PolishTextSecondary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (config.muteAllAppSounds) s("أصوات مكتومة 🔇", "Sounds Muted 🔇") else s("صوت مفعّل 🔊", "Sound Active 🔊"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (config.muteAllAppSounds) Color(0xFFEF4444) else PolishTextSecondary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
             }
@@ -247,14 +279,15 @@ fun VoiceAssistantScreen(
                         imageVector = Icons.Default.Fingerprint,
                         contentDescription = "Voiceprint",
                         tint = PolishPrimary,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (config.voiceprintEnrolled) s("بصمة صوت معتمدة ✓", "Voiceprint Verified ✓") else s("بصمة عامة", "Open Voice"),
+                        text = if (config.voiceprintEnrolled) s("بصمة معتمدة ✓", "Verified ✓") else s("بصمة عامة", "Open Voice"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishPrimary,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
             }
