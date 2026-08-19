@@ -52,14 +52,24 @@ class GeminiService {
 
         try {
             val systemPrompt = """
-                أنت $assistantName، مساعد ذكي ومرافق ذاتي للهاتف. 
-                المستخدم يتحدث إليك بصوته أو يكتب بأي لغة أو لهجة عربية (مصرية، شامية، خليجية، مغربية، فصحى، إلخ).
-                مهمتك هي فهم نية المستخدم وتحويل كلامه إلى إجراء ملموس على الهاتف والرد عليه بأسلوب ودي ذكي باللغة أو اللهجة المناسبة ($preferredDialect).
+                أنت $assistantName، مساعد التحكم الذاتي بالهاتف بدون لمس. 
+                المستخدم يتحدث إليك بصوته أو يكتب بأي لغة أو لهجة عربية.
+                مهمتك هي فهم نية المستخدم وتحويل كلامه فوراً إلى إجراء وتحكم بالهاتف والرد بأسلوب مقتضب ودقيق.
                 
                 الأفعال المدعومة (actionType):
                 - CALL_CONTACT (إجراء اتصال بهاتف أو اسم شخص، payload: اسم الشخص أو الرقم)
-                - SEND_MESSAGE (إرسال رسالة نصية أو واتساب، payload: نص الرسالة أو المستلم)
-                - TOGGLE_SILENT_MODE (كتم الصوت أو تفعيل الوضع الصامت، payload: silent أو normal)
+                - SEND_MESSAGE (إرسال رسالة نصية أو واتساب، payload: نص الرسالة)
+                - TOGGLE_SILENT_MODE (كتم الصوت أو تفعيل الوضع الصامت)
+                - TOGGLE_FLASHLIGHT (تشغيل أو إيقاف كشاف الهاتف والضوء)
+                - OPEN_SETTINGS (فتح إعدادات النظام العامة)
+                - OPEN_WIFI_SETTINGS (فتح إعدادات الواي فاي والشبكات)
+                - OPEN_BLUETOOTH_SETTINGS (فتح إعدادات البلوتوث)
+                - OPEN_DISPLAY_SETTINGS (فتح إعدادات الشاشة والسطوع)
+                - OPEN_BATTERY_SETTINGS (فتح إعدادات واستهلاك البطارية)
+                - OPEN_SECURITY_SETTINGS (فتح إعدادات الأمان وقفل الهاتف)
+                - OPEN_APP (تشغيل تطبيق محدد مثل الكاميرا أو المعرض، payload: اسم التطبيق)
+                - SYSTEM_SECURITY_SCAN (فحص النظام من الاختراق والملفات والتطبيقات الخبيثة)
+                - LOCAL_NETWORK_SCAN (فحص أجهزة ومشاركات الشبكة المحلية)
                 - DEVICE_DIAGNOSTIC (فحص موارد الهاتف وأدائه والذاكرة)
                 - BATTERY_OPTIMIZATION (توفير البطارية وتحسين الاستهلاك)
                 - NETWORK_AUDIT (فحص الشبكة والإنترنت)
@@ -70,8 +80,8 @@ class GeminiService {
                 أرجع النتيجة بصيغة JSON فقط:
                 {
                     "understoodText": "النص المفهوم",
-                    "responseSpeechText": "الرد الصوتي الموجه للمستخدم بصوتك",
-                    "actionType": "CALL_CONTACT | SEND_MESSAGE | TOGGLE_SILENT_MODE | DEVICE_DIAGNOSTIC | BATTERY_OPTIMIZATION | NETWORK_AUDIT | VOICE_NOTE | AI_SUMMARIZE_ACTIVITY | null",
+                    "responseSpeechText": "الرد التنفيذي المباشر",
+                    "actionType": "CALL_CONTACT | SEND_MESSAGE | TOGGLE_SILENT_MODE | TOGGLE_FLASHLIGHT | OPEN_SETTINGS | OPEN_WIFI_SETTINGS | OPEN_BLUETOOTH_SETTINGS | OPEN_DISPLAY_SETTINGS | OPEN_BATTERY_SETTINGS | OPEN_SECURITY_SETTINGS | OPEN_APP | SYSTEM_SECURITY_SCAN | LOCAL_NETWORK_SCAN | DEVICE_DIAGNOSTIC | BATTERY_OPTIMIZATION | NETWORK_AUDIT | VOICE_NOTE | AI_SUMMARIZE_ACTIVITY | null",
                     "actionPayload": "نص المعامل أو null",
                     "detectedDialect": "اسم اللهجة المكتشفة",
                     "confidence": 0.95
@@ -94,7 +104,7 @@ class GeminiService {
                 })
                 put("generationConfig", JSONObject().apply {
                     put("responseMimeType", "application/json")
-                    put("temperature", 0.3)
+                    put("temperature", 0.2)
                 })
             }
 
@@ -139,29 +149,29 @@ class GeminiService {
 
             val prompt = """
                 أنت $assistantName، محرك الذكاء الاصطناعي الخاص بالهاتف.
-                قم بتدقيق وتحليل سجلات الهاتف ومدخلاته ومخرجاته وأنشطته الأخيرة التالية:
+                قم بتدقيق وتحليل سجلات الهاتف والأمان ومشاركات الشبكة المحلية والأنشطة التالية:
                 
                 $logsSummary
                 
                 المطلوب:
-                1. تقديم ملخص شامل لحالة الهاتف وسلوك المستخدم.
+                1. تقديم ملخص شامل لحالة أمان الهاتف ومشاركات الشبكة.
                 2. استخراج أهم الأنماط والسلوكيات المكتشفة.
-                3. تقديم 3 رؤى ذكية وتوصيات عملية مع نسبة الثقة لتحسين الأداء وتوفير الطاقة.
+                3. تقديم 3 رؤى أمنية ذكية وتوصيات عملية مع نسبة الأمان.
                 
                 أرجع الإجابة بصيغة JSON فقط:
                 {
-                   "healthSummary": "ملخص شامل وذكي لحالة الهاتف وسلوك الاستخدام",
+                   "healthSummary": "ملخص أمان وتدقيق الهاتف والشبكة",
                    "detectedHabits": ["سلوك 1", "سلوك 2", "سلوك 3"],
                    "insights": [
                       {
-                        "category": "سلوك الاستخدام أو كفاءة الطاقة أو الأمان",
+                        "category": "الأمان ومكافحة الاختراق أو كفاءة الموارد أو الشبكة المحلية",
                         "title": "عنوان الرؤية الذكية",
                         "summary": "شرح الرؤية",
                         "recommendation": "توصية قابلة للتنفيذ",
                         "score": 95
                       }
                    ],
-                   "resourceOptimizationTips": ["نصيحة 1 لتوفير البطارية", "نصيحة 2 لتقليل استهلاك الذاكرة"]
+                   "resourceOptimizationTips": ["نصيحة أمنية 1", "نصيحة أمنية 2"]
                 }
             """.trimIndent()
 
@@ -175,7 +185,7 @@ class GeminiService {
                 })
                 put("generationConfig", JSONObject().apply {
                     put("responseMimeType", "application/json")
-                    put("temperature", 0.4)
+                    put("temperature", 0.3)
                 })
             }
 
@@ -212,7 +222,7 @@ class GeminiService {
 
             ParsedVoiceAction(
                 understoodText = json.optString("understoodText", originalQuery),
-                responseSpeechText = json.optString("responseSpeechText", "حاضر، جاري تنفيذ طلبك يا صديقي"),
+                responseSpeechText = json.optString("responseSpeechText", "تم تنفيذ الأمر بالنيابة عنك"),
                 actionType = actionType,
                 actionPayload = json.optString("actionPayload").takeIf { it.isNotBlank() && it != "null" },
                 detectedDialect = json.optString("detectedDialect", "العربية"),
@@ -226,7 +236,7 @@ class GeminiService {
     private fun parseAuditJson(jsonStr: String, assistantName: String): AuditAnalysisResult {
         return try {
             val json = JSONObject(jsonStr)
-            val healthSummary = json.optString("healthSummary", "حالة الهاتف مثالية وسلوك الاستخدام متزن.")
+            val healthSummary = json.optString("healthSummary", "حالة أمان الهاتف ممتازة وكافة الاتصالات مؤمنة.")
             
             val habits = mutableListOf<String>()
             val habitsArray = json.optJSONArray("detectedHabits")
@@ -251,11 +261,11 @@ class GeminiService {
                     val item = insightsArray.getJSONObject(i)
                     insights.add(
                         BehaviorInsightEntity(
-                            category = item.optString("category", "تحليل السلوك"),
-                            title = item.optString("title", "رؤية ذكية"),
+                            category = item.optString("category", "أمان وتدقيق"),
+                            title = item.optString("title", "رؤية أمنية"),
                             summary = item.optString("summary", ""),
                             recommendation = item.optString("recommendation", ""),
-                            score = item.optInt("score", 90)
+                            score = item.optInt("score", 95)
                         )
                     )
                 }
@@ -263,9 +273,9 @@ class GeminiService {
 
             AuditAnalysisResult(
                 healthSummary = healthSummary,
-                detectedHabits = habits.ifEmpty { listOf("استخدام نشط للأوامر الصوتية", "إدارة جيدة للبطارية") },
+                detectedHabits = habits.ifEmpty { listOf("تنفيذ ذاتي للأوامر بصمت", "مراقبة مشددة للشبكة المحلية", "فحص الأمان ومكافحة الاختراق") },
                 insights = insights,
-                resourceOptimizationTips = tips.ifEmpty { listOf("تفعيل وضع توفير الموارد للذاكرة") }
+                resourceOptimizationTips = tips.ifEmpty { listOf("إجراء فحص أمان دوري للملفات والتطبيقات") }
             )
         } catch (e: Exception) {
             fallbackAudit(emptyList(), assistantName)
@@ -275,6 +285,74 @@ class GeminiService {
     private fun fallbackLocalInterpreter(query: String, assistantName: String): ParsedVoiceAction {
         val lower = query.lowercase().trim()
         return when {
+            lower.contains("فحص الأمان") || lower.contains("اختراق") || lower.contains("فيروس") || lower.contains("خبيث") || lower.contains("تهديد") || lower.contains("security scan") -> {
+                ParsedVoiceAction(
+                    understoodText = "فحص الأمان ومكافحة الاختراق والملفات الخبيثة",
+                    responseSpeechText = "جاري إجراء فحص أمان شامل للنظام والتطبيقات والملفات الخبيثة",
+                    actionType = ActionType.SYSTEM_SECURITY_SCAN
+                )
+            }
+            lower.contains("كشاف") || lower.contains("ضوء") || lower.contains("فلاش") || lower.contains("torch") || lower.contains("flashlight") -> {
+                ParsedVoiceAction(
+                    understoodText = "التحكم في كشاف الهاتف",
+                    responseSpeechText = "تم تفعيل كشاف الهاتف فوراً",
+                    actionType = ActionType.TOGGLE_FLASHLIGHT
+                )
+            }
+            lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("شبكة محلية") -> {
+                if (lower.contains("فحص") || lower.contains("مراقبة") || lower.contains("أجهزة")) {
+                    ParsedVoiceAction(
+                        understoodText = "فحص ومراقبة أجهزة ومشاركات الشبكة المحلية",
+                        responseSpeechText = "تم فتح تدقيق أجهزة الشبكة ومشاركات الوسائط",
+                        actionType = ActionType.LOCAL_NETWORK_SCAN
+                    )
+                } else {
+                    ParsedVoiceAction(
+                        understoodText = "فتح إعدادات Wi-Fi",
+                        responseSpeechText = "تم فتح إعدادات الشبكة والواي فاي",
+                        actionType = ActionType.OPEN_WIFI_SETTINGS
+                    )
+                }
+            }
+            lower.contains("بلوتوث") || lower.contains("bluetooth") -> {
+                ParsedVoiceAction(
+                    understoodText = "فتح إعدادات البلوتوث",
+                    responseSpeechText = "تم فتح إعدادات البلوتوث والأجهزة المقترنة",
+                    actionType = ActionType.OPEN_BLUETOOTH_SETTINGS
+                )
+            }
+            lower.contains("كاميرا") || lower.contains("صورة") || lower.contains("تصوير") || lower.contains("camera") -> {
+                ParsedVoiceAction(
+                    understoodText = "فتح الكاميرا",
+                    responseSpeechText = "تم فتح الكاميرا للتصوير فوراً",
+                    actionType = ActionType.OPEN_APP,
+                    actionPayload = "الكاميرا"
+                )
+            }
+            lower.contains("إعدادات") || lower.contains("ضبط") || lower.contains("settings") -> {
+                when {
+                    lower.contains("شاشة") || lower.contains("سطوع") -> ParsedVoiceAction(
+                        understoodText = "إعدادات الشاشة",
+                        responseSpeechText = "تم فتح إعدادات الشاشة",
+                        actionType = ActionType.OPEN_DISPLAY_SETTINGS
+                    )
+                    lower.contains("أمان") || lower.contains("حماية") -> ParsedVoiceAction(
+                        understoodText = "إعدادات الأمان",
+                        responseSpeechText = "تم فتح إعدادات الأمان والقفل",
+                        actionType = ActionType.OPEN_SECURITY_SETTINGS
+                    )
+                    lower.contains("بطارية") -> ParsedVoiceAction(
+                        understoodText = "إعدادات البطارية",
+                        responseSpeechText = "تم فتح إعدادات البطارية",
+                        actionType = ActionType.OPEN_BATTERY_SETTINGS
+                    )
+                    else -> ParsedVoiceAction(
+                        understoodText = "إعدادات الهاتف",
+                        responseSpeechText = "تم فتح لوحة إعدادات النظام بالنيابة عنك",
+                        actionType = ActionType.OPEN_SETTINGS
+                    )
+                }
+            }
             lower.contains("اتصل") || lower.contains("كلم") || lower.contains("رن على") || lower.contains("call") -> {
                 val target = query.replace("اتصل بـ", "").replace("اتصل على", "").replace("اتصل", "").replace("كلم", "").trim()
                 ParsedVoiceAction(
@@ -314,17 +392,10 @@ class GeminiService {
                     actionType = ActionType.DEVICE_DIAGNOSTIC
                 )
             }
-            lower.contains("شبكة") || lower.contains("نت") || lower.contains("واي فاي") || lower.contains("wifi") -> {
-                ParsedVoiceAction(
-                    understoodText = "تدقيق الشبكة والاتصال",
-                    responseSpeechText = "الاتصال مستقر مع تشفير البيانات ومراقبة الحزم الواردة",
-                    actionType = ActionType.NETWORK_AUDIT
-                )
-            }
             lower.contains("مذكرة") || lower.contains("سجل") || lower.contains("ملاحظة") || lower.contains("احفظ") -> {
                 ParsedVoiceAction(
                     understoodText = "حفظ ملاحظة صوتية ذكية",
-                    responseSpeechText = "تم تدوين الملاحظة وأرشفتها في قاعدة بيانات الذكاء الاصطناعي",
+                    responseSpeechText = "تم تدوين الملاحظة وأرشفتها في الذاكرة الذكية",
                     actionType = ActionType.VOICE_NOTE,
                     actionPayload = query
                 )
@@ -332,14 +403,14 @@ class GeminiService {
             lower.contains("لخص") || lower.contains("تقرير") || lower.contains("تدقيق") || lower.contains("نشاط") -> {
                 ParsedVoiceAction(
                     understoodText = "استخراج تقرير تدقيق شامل للهاتف",
-                    responseSpeechText = "تم إعداد تقرير شامل عن أحداث الهاتف وتحليل السلوك وتحديث لوحة التحكم",
+                    responseSpeechText = "تم إعداد تقرير شامل عن أحداث الهاتف ومشاركات الشبكة وتحديث لوحة التحكم",
                     actionType = ActionType.AI_SUMMARIZE_ACTIVITY
                 )
             }
             else -> {
                 ParsedVoiceAction(
                     understoodText = query,
-                    responseSpeechText = "أنا معك يا صديقي ($assistantName). سمعت: \"$query\"، وسأظل أتعلم من أسلوبك لتنفيذ كل ما تريده صوتياً بدون لمس الهاتف.",
+                    responseSpeechText = "تم استلام الأمر: \"$query\". النظام يعمل في وضع التحكم الذاتي بالنيابة عنك.",
                     actionType = null
                 )
             }
@@ -352,41 +423,41 @@ class GeminiService {
         val netCount = logs.count { it.type == com.example.data.local.entity.TelemetryType.NETWORK_TRAFFIC }
 
         return AuditAnalysisResult(
-            healthSummary = "قام المساعد الذكي ($assistantName) بأرشفة وتحليل كافة مدخلات ومخرجات الهاتف. الحالة العامة ممتازة والموارد محفوظة بدون هدر.",
+            healthSummary = "قام نظام المساعد الذاتي ($assistantName) بأرشفة وتحليل مدخلات ومخرجات الهاتف ومشاركات الشبكة المحلية وفحص التهديدات. الحالة العامة مؤمنة.",
             detectedHabits = listOf(
-                "استخدام متكرر للأوامر الصوتية الذكية ($voiceCount أمر مسجل)",
-                "مراقبة آمنة لحركة الشبكة والاتصالات ($netCount تدقيق شبكي)",
-                "التحول التلقائي بين اللمس والأوامر الصوتية حسب بيئة الاستخدام"
+                "استماع دائم وتلقائي للأوامر بمجرد فتح التطبيق دون لمس ($voiceCount أمر)",
+                "مراقبة مشفرة لحركة ومشاركات الشبكة المحلية ($netCount تدقيق شبكي)",
+                "التحكم المباشر في أدوات الهاتف وصلاحيات النظام بالنيابة عن المالك"
             ),
             insights = listOf(
                 BehaviorInsightEntity(
                     timestamp = now,
-                    category = "كفاءة الموارد",
-                    title = "تحسين استهلاك الذاكرة في الخلفية",
-                    summary = "التطبيق يدقق البيانات فور وصولها دون تكرار تخزينها لحماية البطارية والمساحة.",
-                    recommendation = "الإبقاء على وضع توفير الموارد نشطاً للحصول على أقصى سرعة استجابة.",
-                    score = 98
+                    category = "مكافحة الاختراق والأمان",
+                    title = "فحص متواصل لسلامة النظام والملفات المشبوهة",
+                    summary = "النظام مدقق ضد محاولات الاختراق وتطبيقات التجسس وصلاحيات التراكب الخطيرة.",
+                    recommendation = "إجراء فحص أمان دوري وتحديث بصمة الصوت البيومترية للمالك.",
+                    score = 99
                 ),
                 BehaviorInsightEntity(
                     timestamp = now - 3600000,
-                    category = "أنماط الأوامر الصوتية",
-                    title = "التعرف الذاتي على اللهجة وأسلوب الحديث",
-                    summary = "تم رصد تفضيلك للعبارات المباشرة مع استجابة صوتية فورية بأقل عدد تفاعلات لمس.",
-                    recommendation = "استخدام الاختصارات السريعة لطلب المكالمات والرسائل بالأمر المباشر.",
-                    score = 94
+                    category = "الشبكة المحلية والمشاركة",
+                    title = "تدقيق الأجهزة المتصلة وبث الوسائط والشاشة",
+                    summary = "يتم رصد أي جهاز محلي يتصل بالشبكة وتشفير قنوات المزامنة ومشاركة الملفات.",
+                    recommendation = "مراجعة قائمة أجهزة الشبكة في لوحة التحكم بشكل منتظم.",
+                    score = 95
                 ),
                 BehaviorInsightEntity(
                     timestamp = now - 7200000,
-                    category = "أمان وتدقيق الهاتف",
-                    title = "فحص التشفير والاتصال بالداشبورد",
-                    summary = "كافة السجلات المؤرشفة مشفرة محلياً وقابلة للمزامنة والوصول الآمن عبر لوحة التحكم.",
-                    recommendation = "فحص الأذونات بانتظام لضمان التحكم الصوتي الكامل بالوظائف.",
-                    score = 96
+                    category = "التحكم الذاتي والصلاحيات",
+                    title = "تنفيذ الأوامر الفورية بصمت بدون إزعاج صوتي",
+                    summary = "المساعد ينفذ المهام بالنيابة عن المستخدم مباشرة مع تأكيد بصري واهتزاز خفيف.",
+                    recommendation = "استخدام الأوامر المباشرة لفتح الإعدادات، الكشاف، الاتصال أو فحص الأمان.",
+                    score = 97
                 )
             ),
             resourceOptimizationTips = listOf(
-                "تفريغ الذاكرة المؤقتة دورياً للحفاظ على سلاسة الأوامر",
-                "استخدام الأوامر الصوتية المباشرة لتقليل تشغيل الشاشة واستهلاك الطاقة"
+                "الحفاظ على وضع الاستماع التلقائي لتوفير الوقت والتحكم السريع",
+                "تطهير التهديدات والملفات غير الموثوقة فور اكتشافها"
             )
         )
     }

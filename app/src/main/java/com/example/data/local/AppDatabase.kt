@@ -8,19 +8,22 @@ import com.example.data.local.dao.ConfigDao
 import com.example.data.local.dao.InsightDao
 import com.example.data.local.dao.ShortcutDao
 import com.example.data.local.dao.TelemetryDao
+import com.example.data.local.dao.VoiceprintDao
 import com.example.data.local.entity.ActionShortcutEntity
 import com.example.data.local.entity.AssistantConfigEntity
 import com.example.data.local.entity.BehaviorInsightEntity
 import com.example.data.local.entity.TelemetryLogEntity
+import com.example.data.local.entity.VoiceprintEntity
 
 @Database(
     entities = [
         TelemetryLogEntity::class,
         ActionShortcutEntity::class,
         BehaviorInsightEntity::class,
-        AssistantConfigEntity::class
+        AssistantConfigEntity::class,
+        VoiceprintEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun shortcutDao(): ShortcutDao
     abstract fun insightDao(): InsightDao
     abstract fun configDao(): ConfigDao
+    abstract fun voiceprintDao(): VoiceprintDao
 
     companion object {
         @Volatile

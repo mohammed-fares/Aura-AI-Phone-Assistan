@@ -14,9 +14,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +25,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,26 +58,24 @@ import com.example.ui.MainViewModel
 import com.example.ui.screens.ActivityArchiveScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.PermissionsScreen
+import com.example.ui.screens.SecurityScanScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.VoiceAssistantScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishOnSecondaryContainer
-import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishSecondaryContainer
 import com.example.ui.theme.PolishSurface
 import com.example.ui.theme.PolishSurfaceBorder
-import com.example.ui.theme.PolishTextMuted
-import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
 import kotlin.math.sqrt
 
 enum class AppTab(val title: String, val testTag: String) {
-    VOICE("المساعد الصوتي", "tab_voice"),
-    DASHBOARD("لوحة التحكم", "tab_dashboard"),
-    ARCHIVE("قاعدة البيانات", "tab_archive"),
-    PERMISSIONS("الصلاحيات", "tab_permissions"),
-    SETTINGS("الإعدادات", "tab_settings")
+    VOICE("التحكم الصوتي", "tab_voice"),
+    SECURITY("فحص الأمان", "tab_security"),
+    DASHBOARD("المراقبة و LAN", "tab_dashboard"),
+    ARCHIVE("سجل الأرشفة", "tab_archive"),
+    SETTINGS("بصمة الصوت", "tab_settings")
 }
 
 class MainActivity : ComponentActivity(), SensorEventListener {
@@ -113,7 +109,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Auto request all permissions immediately on launch
         requestAllPermissions()
 
-        // Init Shake Sensor to support touch/gesture to voice command
+        // Init Shake Sensor to support gesture to voice command
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
@@ -223,9 +219,9 @@ fun MainAppLayout(
                                 Icon(
                                     imageVector = when (tab) {
                                         AppTab.VOICE -> Icons.Default.Mic
+                                        AppTab.SECURITY -> Icons.Default.Shield
                                         AppTab.DASHBOARD -> Icons.Default.Dashboard
                                         AppTab.ARCHIVE -> Icons.Default.Storage
-                                        AppTab.PERMISSIONS -> Icons.Default.Security
                                         AppTab.SETTINGS -> Icons.Default.Settings
                                     },
                                     contentDescription = tab.title,
@@ -235,7 +231,7 @@ fun MainAppLayout(
                             label = {
                                 Text(
                                     text = tab.title,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
                             },
@@ -260,12 +256,9 @@ fun MainAppLayout(
         ) {
             when (selectedTab) {
                 AppTab.VOICE -> VoiceAssistantScreen(viewModel = viewModel)
+                AppTab.SECURITY -> SecurityScanScreen(viewModel = viewModel)
                 AppTab.DASHBOARD -> DashboardScreen(viewModel = viewModel)
                 AppTab.ARCHIVE -> ActivityArchiveScreen(viewModel = viewModel)
-                AppTab.PERMISSIONS -> PermissionsScreen(
-                    viewModel = viewModel,
-                    onRequestAllPermissions = onRequestAllPermissions
-                )
                 AppTab.SETTINGS -> SettingsScreen(viewModel = viewModel)
             }
         }

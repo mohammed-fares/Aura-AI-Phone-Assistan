@@ -21,6 +21,15 @@ class AssistantRepository(
     val shortcuts: Flow<List<ActionShortcutEntity>> = database.shortcutDao().getAllShortcuts()
     val insights: Flow<List<BehaviorInsightEntity>> = database.insightDao().getAllInsights()
     val config: Flow<AssistantConfigEntity?> = database.configDao().getConfigFlow()
+    val voiceprints: Flow<List<com.example.data.local.entity.VoiceprintEntity>> = database.voiceprintDao().getAllVoiceprints()
+
+    suspend fun saveVoiceprintProfile(entity: com.example.data.local.entity.VoiceprintEntity): Long {
+        return database.voiceprintDao().insertVoiceprint(entity)
+    }
+
+    suspend fun clearVoiceprintProfiles() {
+        database.voiceprintDao().clearVoiceprints()
+    }
 
     suspend fun logTelemetry(
         type: TelemetryType,

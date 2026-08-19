@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -26,12 +24,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -67,14 +70,11 @@ import com.example.ui.components.NeuralOrbVisualizer
 import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishGlow
 import com.example.ui.theme.PolishOnPrimaryContainer
-import com.example.ui.theme.PolishOnSecondaryContainer
 import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishPrimaryContainer
-import com.example.ui.theme.PolishSecondary
 import com.example.ui.theme.PolishSecondaryContainer
 import com.example.ui.theme.PolishSuccess
 import com.example.ui.theme.PolishSuccessContainer
-import com.example.ui.theme.PolishSurface
 import com.example.ui.theme.PolishSurfaceBorder
 import com.example.ui.theme.PolishSurfaceElevated
 import com.example.ui.theme.PolishTextMuted
@@ -86,6 +86,7 @@ fun VoiceAssistantScreen(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val isListening by viewModel.voiceEngine.isListening.collectAsStateWithLifecycle()
     val isSpeaking by viewModel.voiceEngine.isSpeaking.collectAsStateWithLifecycle()
     val audioLevel by viewModel.voiceEngine.rmsAudioLevel.collectAsStateWithLifecycle()
@@ -93,6 +94,9 @@ fun VoiceAssistantScreen(
     val isProcessing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val conversation by viewModel.conversation.collectAsStateWithLifecycle()
+    val lastVerification by viewModel.lastVoiceprintVerification.collectAsStateWithLifecycle()
+    val isBackgroundActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
+    val lastBackgroundStatus by viewModel.lastBackgroundStatus.collectAsStateWithLifecycle()
 
     var textInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
@@ -104,15 +108,6 @@ fun VoiceAssistantScreen(
         }
     }
 
-    val quickActionPrompts = listOf(
-        "اتصل برقم سريع",
-        "خلي الهاتف صامت",
-        "افحص أداء المعالج والذاكرة",
-        "وفر استهلاك البطارية",
-        "احفظ ملاحظة صوتية",
-        "لخص نشاط الهاتف وتدقيق الأمان"
-    )
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -120,61 +115,140 @@ fun VoiceAssistantScreen(
             .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Assistant Persona & Status Header
+        // 1. Background Execution Card & Biometric Status
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isBackgroundActive) Color(0xFF10B981).copy(alpha = 0.12f) else PolishSurfaceElevated
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (isBackgroundActive) Color(0xFF10B981).copy(alpha = 0.5f) else PolishSurfaceBorder
+            ),
+            modifier = Modifier.fillMaxWidth().testTag("background_service_banner")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (isBackgroundActive) Color(0xFF10B981) else Color(0xFFEF4444))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = if (isBackgroundActive) "العمل في الخلفية نشط 🟢" else "العمل في الخلفية متوقف",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isBackgroundActive) Color(0xFF10B981) else PolishTextPrimary,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = if (isBackgroundActive) "يستمع وينفذ حتى لو أغلقت الشاشة أو التطبيق" else "اضغط لتشغيل الاستماع أثناء قفل الشاشة",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PolishTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { viewModel.toggleBackgroundService(context) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isBackgroundActive) Color(0xFFEF4444) else Color(0xFF10B981)
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp).testTag("btn_toggle_background_service")
+                ) {
+                    Text(
+                        text = if (isBackgroundActive) "إيقاف الخلفية" else "تشغيل في الخلفية",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 2. Hands-Free Banner & Biometric Voiceprint Status
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = PolishSurfaceElevated,
-                border = BorderStroke(1.dp, PolishSurfaceBorder)
+                shape = RoundedCornerShape(20.dp),
+                color = if (isListening) Color(0xFF10B981).copy(alpha = 0.15f) else PolishSurfaceElevated,
+                border = BorderStroke(1.dp, if (isListening) Color(0xFF10B981) else PolishSurfaceBorder)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (isListening || isSpeaking) PolishPrimary else PolishSuccess)
+                            .background(if (isListening) Color(0xFF10B981) else Color(0xFF94A3B8))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "المساعد الذكي: ${config.assistantName}",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = if (isListening) "استماع دائم ونشط (بدون لمس)" else "الاستماع متوقف مؤقتاً",
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = PolishTextPrimary
+                        color = if (isListening) Color(0xFF10B981) else PolishTextPrimary
                     )
                 }
             }
 
             Surface(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = PolishSecondaryContainer,
                 border = BorderStroke(1.dp, PolishSurfaceBorder)
             ) {
-                Text(
-                    text = config.preferredDialect,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PolishPrimary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Fingerprint,
+                        contentDescription = "Voiceprint",
+                        tint = PolishPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (config.voiceprintEnrolled) "بصمة صوت معتمدة ✓" else "بصمة الصوت عامة",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PolishPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Central Animated Neural Orb
+        // 2. Central Neural Wave Orb
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp),
+                .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             NeuralOrbVisualizer(
@@ -183,16 +257,15 @@ fun VoiceAssistantScreen(
                 isProcessing = isProcessing,
                 audioLevel = audioLevel,
                 onClick = { viewModel.toggleVoiceListening() },
-                size = 150.dp
+                size = 135.dp
             )
         }
 
         Text(
             text = when {
-                isListening -> "جاري الاستماع لصوتك... تحدث الآن بأي لهجة"
-                isSpeaking -> "المساعد يتحدث ويجيب عليك..."
-                isProcessing -> "الذكاء الاصطناعي يحلل طلبك ويحوله لإجراء..."
-                else -> "المس الدائرة وتحدث بصوتك مباشرة"
+                isListening -> "تحدث بأي أمر بصوتك وسينفذه الهاتف فوراً بالنيابة عنك"
+                isProcessing -> "جاري تحليل الأمر والتحكم بالهاتف بصمت..."
+                else -> "اضغط لإعادة تفعيل وضع الاستماع الدائم"
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (isListening) PolishPrimary else PolishTextSecondary,
@@ -200,60 +273,71 @@ fun VoiceAssistantScreen(
             fontSize = 12.sp
         )
 
-        if (isListening && liveRecognizedText.isNotBlank()) {
+        if (liveRecognizedText.isNotBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "« $liveRecognizedText »",
-                style = MaterialTheme.typography.bodyMedium,
-                color = PolishTextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PolishSurfaceElevated,
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Text(
+                    text = "« $liveRecognizedText »",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PolishPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Quick Suggestion Prompts Scroll
+        // 3. Autonomous Quick Phone Action Shortcuts (One-tap phone control)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            quickActionPrompts.forEach { prompt ->
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = PolishSurfaceElevated,
-                    border = BorderStroke(1.dp, PolishSurfaceBorder),
-                    modifier = Modifier.testTag("quick_prompt_$prompt")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .background(PolishSurfaceElevated)
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = { viewModel.handleUserVoiceInput(prompt) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-                        ) {
-                            Text(
-                                text = "✦ $prompt",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = PolishPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
+            QuickPhoneActionButton(
+                icon = Icons.Default.Security,
+                label = "فحص الأمان",
+                onClick = {
+                    viewModel.executeAction(ActionType.SYSTEM_SECURITY_SCAN)
+                    viewModel.startFullSecurityScan()
                 }
-            }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.FlashlightOn,
+                label = "تشغيل الكشاف",
+                onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Wifi,
+                label = "إعدادات Wi-Fi",
+                onClick = { viewModel.executeAction(ActionType.OPEN_WIFI_SETTINGS) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.CameraAlt,
+                label = "فتح الكاميرا",
+                onClick = { viewModel.executeAction(ActionType.OPEN_APP, "الكاميرا") }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.VolumeOff,
+                label = "الوضع الصامت",
+                onClick = { viewModel.executeAction(ActionType.TOGGLE_SILENT_MODE) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Settings,
+                label = "إعدادات الهاتف",
+                onClick = { viewModel.executeAction(ActionType.OPEN_SETTINGS) }
+            )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Conversation & Action History List
+        // 4. Conversation & Autonomous Action Feeds
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -271,13 +355,13 @@ fun VoiceAssistantScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Input & Voice Action Bar
+        // 5. Input Text Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp),
+                .padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
@@ -285,7 +369,7 @@ fun VoiceAssistantScreen(
                 onValueChange = { textInput = it },
                 placeholder = {
                     Text(
-                        text = "اكتب أو اضغط على المايك للتحدث...",
+                        text = "اكتب أو تحدث مباشرة بدون لمس...",
                         style = MaterialTheme.typography.bodySmall,
                         color = PolishTextMuted,
                         fontSize = 12.sp
@@ -316,20 +400,19 @@ fun VoiceAssistantScreen(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Mic Trigger Button
             IconButton(
                 onClick = { viewModel.toggleVoiceListening() },
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
-                    .background(PolishPrimary)
+                    .background(if (isListening) Color(0xFF10B981) else PolishPrimary)
                     .testTag("mic_toggle_button")
             ) {
                 Icon(
                     imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
                     contentDescription = "استماع صوتي",
                     tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
@@ -342,7 +425,7 @@ fun VoiceAssistantScreen(
                         focusManager.clearFocus()
                     },
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
                         .background(PolishPrimary)
                         .testTag("send_query_button")
@@ -351,10 +434,45 @@ fun VoiceAssistantScreen(
                         imageVector = Icons.Default.Send,
                         contentDescription = "إرسال",
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun QuickPhoneActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = PolishSurfaceElevated,
+        border = BorderStroke(1.dp, PolishSurfaceBorder),
+        modifier = Modifier.testTag("quick_action_$label")
+    ) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = PolishPrimary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = PolishTextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -371,10 +489,10 @@ fun ConversationBubble(
     ) {
         Card(
             shape = RoundedCornerShape(
-                topStart = 20.dp,
-                topEnd = 20.dp,
-                bottomStart = if (isUser) 6.dp else 20.dp,
-                bottomEnd = if (isUser) 20.dp else 6.dp
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = if (isUser) 4.dp else 18.dp,
+                bottomEnd = if (isUser) 18.dp else 4.dp
             ),
             colors = CardDefaults.cardColors(
                 containerColor = if (isUser) PolishPrimaryContainer else PolishSurfaceElevated
@@ -385,29 +503,35 @@ fun ConversationBubble(
             ),
             modifier = Modifier.fillMaxWidth(0.92f)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isUser) "أنت (صوتياً)" else "المساعد الذكي",
+                        text = if (isUser) "أنت (صوت المالك)" else "التحكم الذاتي",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (isUser) PolishOnPrimaryContainer else PolishPrimary,
                         fontSize = 11.sp
                     )
-                    if (!message.detectedDialect.isNullOrBlank()) {
-                        Text(
-                            text = message.detectedDialect,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = PolishTextMuted,
-                            fontSize = 10.sp
-                        )
+                    if (isUser && message.biometricVerified) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "بصمة موثقة (${message.biometricConfidence}%) ✓",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF10B981),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyMedium,
@@ -415,44 +539,44 @@ fun ConversationBubble(
                     fontSize = 13.sp
                 )
                 if (message.actionType != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = PolishSuccessContainer,
                         border = BorderStroke(1.dp, PolishSuccess.copy(alpha = 0.3f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
+                                .padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
+                                        .size(6.dp)
                                         .clip(CircleShape)
                                         .background(PolishSuccess)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "تم تنفيذ الإجراء: ${message.actionType.name}",
+                                    text = "تم تنفيذ الإجراء في الهاتف: ${message.actionType.name}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = PolishSuccess,
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
+                                    fontSize = 10.sp
                                 )
                             }
                             Button(
                                 onClick = { onExecuteAgain(message.actionType, message.actionPayload) },
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                    horizontal = 10.dp,
+                                    horizontal = 8.dp,
                                     vertical = 2.dp
                                 ),
-                                modifier = Modifier.height(28.dp)
+                                modifier = Modifier.height(26.dp)
                             ) {
                                 Text("إعادة", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }

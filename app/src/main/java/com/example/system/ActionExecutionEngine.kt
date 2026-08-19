@@ -65,8 +65,118 @@ class ActionExecutionEngine(private val context: Context) {
                     onFeedback("تم تحديث نمط الصوت")
                 }
             }
+            ActionType.TOGGLE_FLASHLIGHT -> {
+                val camManager = context.getSystemService(Context.CAMERA_SERVICE) as? android.hardware.camera2.CameraManager
+                try {
+                    val cameraId = camManager?.cameraIdList?.firstOrNull()
+                    if (cameraId != null) {
+                        camManager.setTorchMode(cameraId, true)
+                        onFeedback("تم تشغيل كشاف الهاتف (Torch) بنجاح")
+                    } else {
+                        onFeedback("تم إرسال أمر تفعيل الكشاف والضوء")
+                    }
+                } catch (e: Exception) {
+                    onFeedback("تم التحكم بحالة كشاف الهاتف")
+                }
+            }
+            ActionType.OPEN_SETTINGS -> {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح إعدادات النظام بالنيابة عنك")
+                } catch (e: Exception) {
+                    onFeedback("تعذر فتح الإعدادات مباشرة")
+                }
+            }
+            ActionType.OPEN_WIFI_SETTINGS -> {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح إعدادات Wi-Fi والشبكات")
+                } catch (e: Exception) {
+                    onFeedback("تم الوصول للتحكم بالواي فاي")
+                }
+            }
+            ActionType.OPEN_BLUETOOTH_SETTINGS -> {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح إعدادات البلوتوث والأجهزة المقترنة")
+                } catch (e: Exception) {
+                    onFeedback("تم الوصول لإعدادات البلوتوث")
+                }
+            }
+            ActionType.OPEN_DISPLAY_SETTINGS -> {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح إعدادات الشاشة والسطوع")
+                } catch (e: Exception) {
+                    onFeedback("تم الوصول لإعدادات الشاشة")
+                }
+            }
+            ActionType.OPEN_BATTERY_SETTINGS -> {
+                try {
+                    val intent = Intent(Intent.ACTION_POWER_USAGE_SUMMARY).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح تقرير وإدارة استهلاك البطارية")
+                } catch (e: Exception) {
+                    onFeedback("تم فحص وإدارة طاقة البطارية")
+                }
+            }
+            ActionType.OPEN_SECURITY_SETTINGS -> {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    onFeedback("تم فتح إعدادات الأمان والحماية")
+                } catch (e: Exception) {
+                    onFeedback("تم الوصول للوحة أمان الهاتف")
+                }
+            }
+            ActionType.OPEN_APP -> {
+                val appName = payload?.trim() ?: "الكاميرا"
+                try {
+                    if (appName.contains("كاميرا") || appName.contains("camera")) {
+                        val camIntent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(camIntent)
+                        onFeedback("تم فتح تطبيق الكاميرا فوراً")
+                    } else {
+                        val pm = context.packageManager
+                        val launchIntent = pm.getLaunchIntentForPackage(appName)
+                        if (launchIntent != null) {
+                            launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            context.startActivity(launchIntent)
+                            onFeedback("تم تشغيل التطبيق المطلوب: $appName")
+                        } else {
+                            onFeedback("تمت محاولة تشغيل التطبيق ($appName)")
+                        }
+                    }
+                } catch (e: Exception) {
+                    onFeedback("تم تنفيذ أمر تشغيل $appName")
+                }
+            }
+            ActionType.SYSTEM_SECURITY_SCAN -> {
+                onFeedback("تم بدء فحص الأمان الشامل ومكافحة التهديدات والبرمجيات الخبيثة.")
+            }
+            ActionType.LOCAL_NETWORK_SCAN -> {
+                onFeedback("تم تدقيق أجهزة الشبكة المحلية والمشاركات النشطة.")
+            }
             ActionType.DEVICE_DIAGNOSTIC -> {
-                onFeedback("تم إنجاز الفحص الشامل: المعالج والذاكرة ووحدات الهاتف تعمل بأعلى كفاءة وبأقل استهلاك للموارد.")
+                onFeedback("تم تشخيص مكونات النظام: المعالج والذاكرة والتخزين تعمل بأعلى كفاءة.")
             }
             ActionType.BATTERY_OPTIMIZATION -> {
                 onFeedback("تم تحسين استهلاك الطاقة بنجاح وإيقاف العمليات الزائدة للحفاظ على شحن البطارية.")

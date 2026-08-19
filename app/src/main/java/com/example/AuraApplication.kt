@@ -22,6 +22,9 @@ class AuraApplication : Application() {
     val telemetryManager by lazy { DeviceTelemetryManager(this) }
     val voiceSpeechEngine by lazy { VoiceSpeechEngine(this) }
     val actionExecutionEngine by lazy { ActionExecutionEngine(this) }
+    val voiceprintManager by lazy { com.example.system.VoiceprintManager(this, database.voiceprintDao()) }
+    val securityScanEngine by lazy { com.example.system.SecurityScanEngine(this) }
+    val localNetworkMonitor by lazy { com.example.system.LocalNetworkMonitor(this) }
 
     override fun onCreate() {
         super.onCreate()

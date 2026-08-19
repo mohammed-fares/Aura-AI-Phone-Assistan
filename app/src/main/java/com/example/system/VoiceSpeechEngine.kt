@@ -3,6 +3,8 @@ package com.example.system
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -19,6 +21,7 @@ class VoiceSpeechEngine(private val context: Context) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
     private var isTtsReady = false
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
@@ -31,6 +34,13 @@ class VoiceSpeechEngine(private val context: Context) {
 
     private val _lastRecognizedText = MutableStateFlow("")
     val lastRecognizedText: StateFlow<String> = _lastRecognizedText.asStateFlow()
+
+    // Recent RMS buffer for biometric voiceprint analysis
+    val recentRmsBuffer = mutableListOf<Float>()
+
+    private var isContinuousListeningMode = false
+    private var onResultCallback: ((String, List<Float>) -> Unit)? = null
+    private var onErrorCallback: ((String) -> Unit)? = null
 
     init {
         initTts()
@@ -51,9 +61,16 @@ class VoiceSpeechEngine(private val context: Context) {
                     }
                     override fun onDone(utteranceId: String?) {
                         _isSpeaking.value = false
+                        // Resume continuous listening if active
+                        if (isContinuousListeningMode) {
+                            mainHandler.postDelayed({ restartListeningInternal() }, 400)
+                        }
                     }
                     override fun onError(utteranceId: String?) {
                         _isSpeaking.value = false
+                        if (isContinuousListeningMode) {
+                            mainHandler.postDelayed({ restartListeningInternal() }, 400)
+                        }
                     }
                 })
             }
@@ -72,16 +89,27 @@ class VoiceSpeechEngine(private val context: Context) {
         _isSpeaking.value = false
     }
 
-    fun startListening(
-        onResult: (String) -> Unit,
+    fun startContinuousListening(
+        onResult: (String, List<Float>) -> Unit,
         onError: (String) -> Unit
     ) {
+        isContinuousListeningMode = true
+        onResultCallback = onResult
+        onErrorCallback = onError
+        restartListeningInternal()
+    }
+
+    private fun restartListeningInternal() {
+        if (!isContinuousListeningMode) return
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            onError("محرك التعرف على الصوت غير متوفر في هذا النظام.")
+            onErrorCallback?.invoke("محرك التعرف على الصوت غير متوفر في هذا النظام.")
             return
         }
 
-        stopListening()
+        stopListeningQuietly()
+        synchronized(recentRmsBuffer) {
+            recentRmsBuffer.clear()
+        }
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
             setRecognitionListener(object : RecognitionListener {
@@ -92,7 +120,12 @@ class VoiceSpeechEngine(private val context: Context) {
                     _isListening.value = true
                 }
                 override fun onRmsChanged(rmsdB: Float) {
-                    _rmsAudioLevel.value = (rmsdB.coerceAtLeast(0f) / 10f).coerceIn(0f, 1f)
+                    val normalized = (rmsdB.coerceAtLeast(0f) / 10f).coerceIn(0f, 1f)
+                    _rmsAudioLevel.value = normalized
+                    synchronized(recentRmsBuffer) {
+                        if (recentRmsBuffer.size > 50) recentRmsBuffer.removeAt(0)
+                        recentRmsBuffer.add(normalized)
+                    }
                 }
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {
@@ -102,13 +135,12 @@ class VoiceSpeechEngine(private val context: Context) {
                 override fun onError(error: Int) {
                     _isListening.value = false
                     _rmsAudioLevel.value = 0f
-                    val msg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "لم يتم فهم الصوت بوضوح، يرجى المحاولة مرة أخرى."
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "انتهت مهلة التحدث."
-                        SpeechRecognizer.ERROR_AUDIO -> "خطأ في تسجيل الصوت."
-                        else -> "جاري انتظار الأمر الصوتي..."
+                    // In continuous mode, re-arm automatically after brief pause
+                    if (isContinuousListeningMode && !_isSpeaking.value) {
+                        mainHandler.postDelayed({
+                            restartListeningInternal()
+                        }, 800)
                     }
-                    onError(msg)
                 }
                 override fun onResults(results: Bundle?) {
                     _isListening.value = false
@@ -117,7 +149,14 @@ class VoiceSpeechEngine(private val context: Context) {
                     val text = matches?.firstOrNull() ?: ""
                     if (text.isNotBlank()) {
                         _lastRecognizedText.value = text
-                        onResult(text)
+                        val copyBuffer = synchronized(recentRmsBuffer) { recentRmsBuffer.toList() }
+                        onResultCallback?.invoke(text, copyBuffer)
+                    }
+                    // Re-arm listening loop
+                    if (isContinuousListeningMode && !_isSpeaking.value) {
+                        mainHandler.postDelayed({
+                            restartListeningInternal()
+                        }, 600)
                     }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {
@@ -141,13 +180,25 @@ class VoiceSpeechEngine(private val context: Context) {
             speechRecognizer?.startListening(intent)
             _isListening.value = true
         } catch (e: Exception) {
-            Log.e("VoiceSpeechEngine", "startListening exception", e)
+            Log.e("VoiceSpeechEngine", "startListening error", e)
             _isListening.value = false
-            onError("تعذر بدء الاستماع: ${e.message}")
+            if (isContinuousListeningMode) {
+                mainHandler.postDelayed({ restartListeningInternal() }, 1500)
+            }
         }
     }
 
-    fun stopListening() {
+    fun startListening(
+        onResult: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        startContinuousListening(
+            onResult = { text, _ -> onResult(text) },
+            onError = onError
+        )
+    }
+
+    private fun stopListeningQuietly() {
         try {
             speechRecognizer?.stopListening()
             speechRecognizer?.cancel()
@@ -160,8 +211,14 @@ class VoiceSpeechEngine(private val context: Context) {
         _rmsAudioLevel.value = 0f
     }
 
+    fun stopListening() {
+        isContinuousListeningMode = false
+        stopListeningQuietly()
+    }
+
     fun destroy() {
-        stopListening()
+        isContinuousListeningMode = false
+        stopListeningQuietly()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null

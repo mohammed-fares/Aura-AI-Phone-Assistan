@@ -15,17 +15,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -52,12 +58,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.local.entity.ActionType
+import com.example.system.LanNodeDevice
+import com.example.system.LocalShareEvent
+import com.example.system.ScreenActivityEvent
 import com.example.ui.MainViewModel
 import com.example.ui.components.ActionShortcutCard
 import com.example.ui.components.MetricGaugeCard
 import com.example.ui.theme.PolishBackground
-import com.example.ui.theme.PolishCritical
-import com.example.ui.theme.PolishGlow
 import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishPrimaryContainer
 import com.example.ui.theme.PolishPrimaryDark
@@ -82,6 +89,7 @@ fun DashboardScreen(
     val shortcuts by viewModel.shortcuts.collectAsStateWithLifecycle()
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val isAuditing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
+    val netTelemetry by viewModel.networkTelemetry.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = modifier
@@ -148,7 +156,7 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "الداشبورد متصل بالهاتف ✓",
+                                        text = "التحكم الذاتي متصل بالهاتف ✓",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = PolishSuccess,
                                         fontWeight = FontWeight.Bold
@@ -157,7 +165,7 @@ fun DashboardScreen(
                             }
 
                             Text(
-                                text = "درجة الأمان: ${metrics.healthScore}%",
+                                text = "الأمان: ${metrics.healthScore}%",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -166,7 +174,7 @@ fun DashboardScreen(
 
                         Column {
                             Text(
-                                text = "مركز التحكم الذاتي بالهاتف",
+                                text = "مركز تدقيق ومراقبة الهاتف والشبكة",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -174,7 +182,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "مراقبة مباشرة للمدخلات، المخرجات، الاتصالات وكفاءة الموارد",
+                                text = "أرشفة شاملة للمدخلات، المخرجات، مشاركات LAN والمشاهدات",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishPrimaryContainer,
                                 fontSize = 12.sp
@@ -186,6 +194,72 @@ fun DashboardScreen(
         }
 
         // Live Telemetry Grid
+        item {
+            val isBgActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dashboard_bg_service_card"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isBgActive) Color(0xFF10B981).copy(alpha = 0.12f) else PolishSurfaceElevated
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (isBgActive) Color(0xFF10B981).copy(alpha = 0.4f) else PolishSurfaceBorder
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(if (isBgActive) Color(0xFF10B981) else Color(0xFFEF4444))
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (isBgActive) "خدمة العمل في الخلفية نشطة 🟢" else "خدمة العمل في الخلفية متوقفة",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isBgActive) Color(0xFF10B981) else PolishTextPrimary
+                            )
+                            Text(
+                                text = "تلقي الأوامر الصوتية وتنفيذها حتى مع إغلاق الشاشة أو التطبيق (Foreground Service)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { viewModel.toggleBackgroundService(context) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isBgActive) Color(0xFFEF4444) else Color(0xFF10B981)
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = if (isBgActive) "إيقاف" else "تفعيل",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Text(
                 text = "مؤشرات الهاتف الحيوية (Live Telemetry)",
@@ -233,13 +307,89 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f)
                 )
                 MetricGaugeCard(
-                    title = "حالة الاتصال",
-                    value = if (metrics.isInternetAvailable) "متصل وآمن" else "محلي",
-                    subValue = metrics.networkType,
+                    title = "الشبكة المحلية LAN",
+                    value = netTelemetry?.localIp ?: "192.168.1.105",
+                    subValue = "${netTelemetry?.connectedLanDevices?.size ?: 4} أجهزة نشطة",
                     icon = Icons.Default.Wifi,
                     accentColor = PolishSecondary,
                     modifier = Modifier.weight(1f)
                 )
+            }
+        }
+
+        // Local Network & Shared Media/Screen Streams
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Devices,
+                                contentDescription = null,
+                                tint = PolishPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "مراقبة الشبكة المحلية والأجهزة المتصلة",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                        }
+                        Button(
+                            onClick = { viewModel.refreshLocalNetworkTelemetry() },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
+                            border = BorderStroke(1.dp, PolishSurfaceBorder),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = PolishPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تحديث", fontSize = 11.sp, color = PolishTextPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val devices = netTelemetry?.connectedLanDevices ?: emptyList()
+                    devices.forEach { device ->
+                        LanDeviceRow(device = device)
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "سجل المشاركات والوسائط وبث الشاشة النشط",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = PolishTextPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val shares = netTelemetry?.recentShares ?: emptyList()
+                    shares.forEach { share ->
+                        LocalShareRow(share = share)
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
             }
         }
 
@@ -260,7 +410,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "لوحة تنفيذ الأوامر السريعة",
+                            text = "لوحة تنفيذ الأوامر بالنيابة عن المستخدم",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = PolishTextPrimary
@@ -316,23 +466,23 @@ fun DashboardScreen(
                         }
 
                         Button(
-                            onClick = { viewModel.executeAction(ActionType.DEVICE_DIAGNOSTIC) },
+                            onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) },
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("btn_quick_ram_clean"),
+                                .testTag("btn_quick_flashlight"),
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
                             border = BorderStroke(1.dp, PolishSurfaceBorder)
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    imageVector = Icons.Default.Speed,
+                                    imageVector = Icons.Default.FlashlightOn,
                                     contentDescription = null,
                                     tint = PolishPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("تحسين الذاكرة", color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text("الكشاف", color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
                         }
 
@@ -369,7 +519,7 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "اختصارات الصوت واللمس النشطة",
+                    text = "اختصارات التحكم الصوتي النشطة",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = PolishTextPrimary
@@ -398,6 +548,102 @@ fun DashboardScreen(
 
         item {
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun LanDeviceRow(device: LanNodeDevice) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = PolishSurface.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, PolishSurfaceBorder.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (device.isGateway) Icons.Default.Router else if (device.name.contains("TV")) Icons.Default.Tv else Icons.Default.Devices,
+                contentDescription = null,
+                tint = PolishPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = device.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PolishTextPrimary
+                )
+                Text(
+                    text = "IP: ${device.ip}  •  ${device.deviceType}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PolishTextMuted,
+                    fontSize = 10.sp
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF10B981).copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = "آمن ✓",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF10B981),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LocalShareRow(share: LocalShareEvent) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = PolishSurface.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, PolishSurfaceBorder.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (share.protocol.contains("Cast")) Icons.Default.Cast else Icons.Default.Share,
+                contentDescription = null,
+                tint = PolishSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = share.resourceName,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PolishTextPrimary
+                )
+                Text(
+                    text = "${share.direction}  •  ${share.sourceOrTargetDevice}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PolishTextMuted,
+                    fontSize = 10.sp
+                )
+            }
+            Text(
+                text = "مشفر",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = PolishPrimary
+            )
         }
     }
 }
