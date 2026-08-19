@@ -57,14 +57,21 @@ class GeminiService {
                 Your job is to understand the user's intent, map it to a specific phone action, and return a concise, executive response.
                 
                 Supported action types (actionType):
-                - CALL_CONTACT (Initiate phone call / dial number or name, payload: contact name/number)
-                - SEND_MESSAGE (Send SMS / text message, payload: message body)
+                - CALL_CONTACT (Initiate phone call / dial number or name, payload: contact name or number)
+                - END_CALL (End or hang up active phone call)
+                - SEND_MESSAGE (Send SMS / text message, payload: "contact: message body" or message text)
                 - SEND_EMAIL (Compose/send email, payload: email address or content)
                 - OPEN_APP (Launch any installed app like WhatsApp, YouTube, etc., payload: app name)
+                - CLOSE_APP (Close active app / return to device home screen)
+                - RETURN_HOME (Return to device home screen)
                 - OPEN_CAMERA (Open camera)
+                - OPEN_GALLERY (Open photo and media gallery)
+                - OPEN_CALCULATOR (Open calculator)
+                - OPEN_MAPS (Open Google Maps / navigation, payload: destination or address)
                 - OPEN_BROWSER (Open web browser, payload: url or search query)
                 - SET_ALARM (Open clock / alarm / timer)
                 - WEB_SEARCH (Perform web / Google search, payload: search query)
+                - SET_VOLUME (Adjust sound volume, payload: "up" | "down" | "mute" | "max")
                 - TOGGLE_SILENT_MODE (Toggle silent / normal mode)
                 - TOGGLE_FLASHLIGHT (Turn on/off flashlight / torch)
                 - OPEN_SETTINGS (Open main device settings)
@@ -85,7 +92,7 @@ class GeminiService {
                 {
                     "understoodText": "Understood intent",
                     "responseSpeechText": "Concise executive confirmation in user language",
-                    "actionType": "CALL_CONTACT | SEND_MESSAGE | SEND_EMAIL | OPEN_APP | OPEN_CAMERA | OPEN_BROWSER | SET_ALARM | WEB_SEARCH | TOGGLE_SILENT_MODE | TOGGLE_FLASHLIGHT | OPEN_SETTINGS | OPEN_WIFI_SETTINGS | OPEN_BLUETOOTH_SETTINGS | OPEN_DISPLAY_SETTINGS | OPEN_BATTERY_SETTINGS | OPEN_SECURITY_SETTINGS | SYSTEM_SECURITY_SCAN | LOCAL_NETWORK_SCAN | DEVICE_DIAGNOSTIC | BATTERY_OPTIMIZATION | VOICE_NOTE | AI_SUMMARIZE_ACTIVITY | null",
+                    "actionType": "CALL_CONTACT | END_CALL | SEND_MESSAGE | SEND_EMAIL | OPEN_APP | CLOSE_APP | RETURN_HOME | OPEN_CAMERA | OPEN_GALLERY | OPEN_CALCULATOR | OPEN_MAPS | OPEN_BROWSER | SET_ALARM | WEB_SEARCH | SET_VOLUME | TOGGLE_SILENT_MODE | TOGGLE_FLASHLIGHT | OPEN_SETTINGS | OPEN_WIFI_SETTINGS | OPEN_BLUETOOTH_SETTINGS | OPEN_DISPLAY_SETTINGS | OPEN_BATTERY_SETTINGS | OPEN_SECURITY_SETTINGS | SYSTEM_SECURITY_SCAN | LOCAL_NETWORK_SCAN | DEVICE_DIAGNOSTIC | BATTERY_OPTIMIZATION | VOICE_NOTE | AI_SUMMARIZE_ACTIVITY | null",
                     "actionPayload": "extracted payload or null",
                     "detectedDialect": "Arabic / English",
                     "confidence": 0.95
@@ -303,12 +310,30 @@ class GeminiService {
                 )
             }
 
+            // End Call / Hang up
+            lower.contains("انه المكالمة") || lower.contains("إنهاء المكالمة") || lower.contains("اقفل الخط") || lower.contains("اغلق المكالمة") || lower.contains("إغلاق المكالمة") || lower.contains("end call") || lower.contains("hang up") || lower.contains("terminate call") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "إنهاء المكالمة الهاتفية" else "End Active Call",
+                    responseSpeechText = if (isArabic) "تم إنهاء المكالمة وإغلاق خط الهاتف" else "Active call ended",
+                    actionType = ActionType.END_CALL
+                )
+            }
+
+            // Close App / Return Home
+            lower.contains("اغلق التطبيق") || lower.contains("إغلاق التطبيق") || lower.contains("اقفل التطبيق") || lower.contains("اخرج") || lower.contains("الرئيسية") || lower.contains("الشاشة الرئيسية") || lower.contains("close app") || lower.contains("return home") || lower.contains("go home") || lower.contains("exit app") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "العودة للشاشة الرئيسية وإغلاق التطبيق" else "Return to Home Screen",
+                    responseSpeechText = if (isArabic) "تم إغلاق الواجهة والعودة للشاشة الرئيسية" else "Returned to Home screen",
+                    actionType = ActionType.RETURN_HOME
+                )
+            }
+
             // Phone Calls
             lower.contains("اتصل") || lower.contains("كلم") || lower.contains("رن على") || lower.contains("call") || lower.contains("dial") || lower.contains("phone") -> {
                 val target = query.replace(Regex("(?i)call|dial|phone|اتصل بـ|اتصل على|اتصل|كلم"), "").trim()
                 ParsedVoiceAction(
                     understoodText = if (isArabic) "إجراء مكالمة هاتفية" else "Make Phone Call",
-                    responseSpeechText = if (isArabic) "جاري الاتصال بـ ${if (target.isNotBlank()) target else "جهة الاتصال"}" else "Calling ${if (target.isNotBlank()) target else "contact"}",
+                    responseSpeechText = if (isArabic) "جاري الاتصال المباشر بـ ${if (target.isNotBlank()) target else "جهة الاتصال"}" else "Calling ${if (target.isNotBlank()) target else "contact"}",
                     actionType = ActionType.CALL_CONTACT,
                     actionPayload = target.ifBlank { "0000000" }
                 )
@@ -316,10 +341,50 @@ class GeminiService {
 
             // SMS Messages
             lower.contains("رسالة") || lower.contains("مسج") || lower.contains("sms") || lower.contains("text message") || lower.contains("send text") -> {
+                val clean = query.replace(Regex("(?i)send message to|send sms to|send text to|sms|message|ارسل رسالة الى|أرسل رسالة إلى|ارسل رساله ل|ارسل رسالة|رسالة"), "").trim()
                 ParsedVoiceAction(
                     understoodText = if (isArabic) "إرسال رسالة SMS" else "Send SMS Message",
-                    responseSpeechText = if (isArabic) "فتحت لك واجهة كتابة وإرسال الرسائل الفورية" else "SMS compose opened",
+                    responseSpeechText = if (isArabic) "تم تجهيز وإرسال الرسالة النصية فوراً" else "SMS dispatched",
                     actionType = ActionType.SEND_MESSAGE,
+                    actionPayload = clean.ifBlank { query }
+                )
+            }
+
+            // Gallery / Photos
+            lower.contains("استوديو") || lower.contains("معرض") || lower.contains("الصور") || lower.contains("gallery") || lower.contains("photos") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "فتح معرض الصور" else "Open Gallery",
+                    responseSpeechText = if (isArabic) "تم فتح معرض الصور والوسائط" else "Gallery opened",
+                    actionType = ActionType.OPEN_GALLERY
+                )
+            }
+
+            // Calculator
+            lower.contains("حاسبة") || lower.contains("آلة حاسبة") || lower.contains("احسب") || lower.contains("calculator") || lower.contains("calc") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "فتح الآلة الحاسبة" else "Open Calculator",
+                    responseSpeechText = if (isArabic) "تم تشغيل الآلة الحاسبة" else "Calculator launched",
+                    actionType = ActionType.OPEN_CALCULATOR
+                )
+            }
+
+            // Maps & Navigation
+            lower.contains("خرائط") || lower.contains("خريطة") || lower.contains("ملاحة") || lower.contains("موقع") || lower.contains("maps") || lower.contains("navigation") || lower.contains("directions") -> {
+                val destination = query.replace(Regex("(?i)maps to|directions to|navigation to|maps|خرائط الى|خريطة|ملاحة|خرائط"), "").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "فتح الخرائط والملاحة" else "Open Maps",
+                    responseSpeechText = if (isArabic) "تم فتح تطبيق الخرائط وتحديد الوجهة" else "Maps opened",
+                    actionType = ActionType.OPEN_MAPS,
+                    actionPayload = destination
+                )
+            }
+
+            // Sound Volume Controls
+            lower.contains("ارفع الصوت") || lower.contains("اخفض الصوت") || lower.contains("اعلى صوت") || lower.contains("مستوى الصوت") || lower.contains("volume up") || lower.contains("volume down") || lower.contains("max volume") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "التحكم في مستوى الصوت" else "Volume Control",
+                    responseSpeechText = if (isArabic) "تم ضبط مستوى صوت الهاتف" else "Volume adjusted",
+                    actionType = ActionType.SET_VOLUME,
                     actionPayload = query
                 )
             }

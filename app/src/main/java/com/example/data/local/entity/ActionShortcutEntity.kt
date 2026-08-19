@@ -5,13 +5,20 @@ import androidx.room.PrimaryKey
 
 enum class ActionType {
     CALL_CONTACT,          // Make phone call / dial
+    END_CALL,              // End / hang up active phone call
     SEND_MESSAGE,          // Send SMS / text message
     SEND_EMAIL,            // Compose and send email
     OPEN_APP,              // Launch any installed app
+    CLOSE_APP,             // Close app / exit top task
+    RETURN_HOME,           // Return to Home screen
     OPEN_CAMERA,           // Open system camera
+    OPEN_GALLERY,          // Open photos and media gallery
+    OPEN_CALCULATOR,       // Open calculator
+    OPEN_MAPS,             // Open Google Maps / Navigation
     OPEN_BROWSER,          // Open web browser / URL
     SET_ALARM,             // Open Clock / Set Alarm / Timer
     WEB_SEARCH,            // Perform web / Google search
+    SET_VOLUME,            // Adjust phone sound volume
     TOGGLE_SILENT_MODE,    // Mute / Unmute / DND
     TOGGLE_FLASHLIGHT,     // Turn on/off camera flashlight
     OPEN_SETTINGS,         // Main phone settings

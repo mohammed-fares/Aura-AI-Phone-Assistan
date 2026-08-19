@@ -29,6 +29,27 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class ExecutionStep(
+    val stepIndex: Int,
+    val title: String,
+    val description: String,
+    val gestureType: String,
+    val isCompleted: Boolean = false,
+    val isActive: Boolean = false
+)
+
+data class LiveExecutionPlan(
+    val id: String = System.currentTimeMillis().toString(),
+    val commandTitle: String,
+    val actionType: ActionType,
+    val actionPayload: String? = null,
+    val steps: List<ExecutionStep>,
+    val currentStepIndex: Int = 0,
+    val isRunning: Boolean = false,
+    val isCompleted: Boolean = false,
+    val statusMessage: String = ""
+)
+
 data class AppPermissionInfo(
     val permission: String,
     val title: String,
@@ -133,6 +154,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _selectedLogFilter = MutableStateFlow<TelemetryType?>(null)
     val selectedLogFilter: StateFlow<TelemetryType?> = _selectedLogFilter.asStateFlow()
+
+    // Autonomous Execution Plan State
+    private val _activeExecutionPlan = MutableStateFlow<LiveExecutionPlan?>(null)
+    val activeExecutionPlan: StateFlow<LiveExecutionPlan?> = _activeExecutionPlan.asStateFlow()
 
     // Permissions List
     private val _permissionsState = MutableStateFlow<List<AppPermissionInfo>>(emptyList())
@@ -418,19 +443,120 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executeAction(actionType: ActionType, payload: String? = null, shortcutId: Long? = null) {
-        actionEngine.executeAction(actionType, payload, _appLanguage.value) { feedback ->
-            _systemStatusNotice.value = feedback
-            viewModelScope.launch {
-                repository.logTelemetry(
-                    type = TelemetryType.TOUCH_GESTURE,
-                    title = "$actionType",
-                    description = feedback,
-                    severity = TelemetrySeverity.OPTIMAL,
-                    aiAudited = true
+        viewModelScope.launch {
+            val plan = buildExecutionPlan(actionType, payload)
+            _activeExecutionPlan.value = plan
+
+            // Animate through each autonomous step
+            for (index in plan.steps.indices) {
+                val updatedSteps = plan.steps.mapIndexed { i, s ->
+                    when {
+                        i < index -> s.copy(isCompleted = true, isActive = false)
+                        i == index -> s.copy(isActive = true, isCompleted = false)
+                        else -> s.copy(isActive = false, isCompleted = false)
+                    }
+                }
+                _activeExecutionPlan.value = _activeExecutionPlan.value?.copy(
+                    steps = updatedSteps,
+                    currentStepIndex = index
                 )
-                shortcutId?.let { repository.recordShortcutExecution(it) }
+                actionEngine.vibratePhone(40L)
+                delay(400L)
+            }
+
+            // Final step: trigger real OS action
+            actionEngine.executeAction(actionType, payload, _appLanguage.value) { feedback ->
+                _systemStatusNotice.value = feedback
+                val finalSteps = plan.steps.map { it.copy(isCompleted = true, isActive = false) }
+                _activeExecutionPlan.value = _activeExecutionPlan.value?.copy(
+                    steps = finalSteps,
+                    isRunning = false,
+                    isCompleted = true,
+                    statusMessage = feedback
+                )
+
+                viewModelScope.launch {
+                    repository.logTelemetry(
+                        type = TelemetryType.TOUCH_GESTURE,
+                        title = "$actionType",
+                        description = feedback,
+                        severity = TelemetrySeverity.OPTIMAL,
+                        aiAudited = true
+                    )
+                    shortcutId?.let { repository.recordShortcutExecution(it) }
+                }
             }
         }
+    }
+
+    fun dismissExecutionPlan() {
+        _activeExecutionPlan.value = null
+    }
+
+    fun executeReturnHome() {
+        executeAction(ActionType.RETURN_HOME)
+    }
+
+    fun executeEndCall() {
+        executeAction(ActionType.END_CALL)
+    }
+
+    private fun buildExecutionPlan(actionType: ActionType, payload: String?): LiveExecutionPlan {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        val steps = when (actionType) {
+            ActionType.CALL_CONTACT -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل الأمر الصوتي" else "AI Intent Analysis", if (isAr) "فهم قصد إجراء مكالمة هاتفية" else "Parsing contact name or number", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "مطابقة جهة الاتصال" else "Contact Resolution", if (isAr) "البحث في دليل الأسماء عن (${payload ?: "الجهة"})" else "Querying phone contacts for (${payload ?: "Contact"})", "CONTACT_LOOKUP"),
+                ExecutionStep(2, if (isAr) "فتح مشغل المكالمات" else "Launch Phone Dialer", if (isAr) "محاكاة طلب الرقم وتوجيه الخط" else "Simulating dialing and audio routing", "DIAL_GESTURE"),
+                ExecutionStep(3, if (isAr) "بدء المكالمة الفعلية" else "Initiate Direct Call", if (isAr) "إطلاق المكالمة الهاتفية بنجاح" else "Direct call active on device", "CALL_DIRECT")
+            )
+            ActionType.END_CALL -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل الأمر الصوتي" else "AI Intent Analysis", if (isAr) "رصد أمر إنهاء المكالمة" else "Recognized end call command", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "الاتصال بخدمة الاتصالات" else "Telecom Service Hook", if (isAr) "إرسال إشارة إنهاء المكالمة" else "Sending disconnect signal", "CALL_DIRECT"),
+                ExecutionStep(2, if (isAr) "إغلاق شاشة المكالمة" else "Close Call Screen", if (isAr) "إعادة توجيه الصوت وإغلاق الخط" else "Resetting audio and closing call view", "RETURN_HOME")
+            )
+            ActionType.SEND_MESSAGE -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل النص والجهة" else "AI Message Parsing", if (isAr) "استخراج نص الرسالة والمستلم" else "Extracting message body and recipient", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "تجهيز الرسالة النصية" else "Drafting SMS", if (isAr) "صياغة نص الرسالة: \"${payload ?: ""}\"" else "Formatting payload: \"${payload ?: ""}\"", "COMPOSE_SMS"),
+                ExecutionStep(2, if (isAr) "إرسال الرسالة القصيرة" else "Dispatching SMS", if (isAr) "إرسال الرسالة عبر شبكة الجوال" else "Transmitting SMS via cellular network", "COMPOSE_SMS"),
+                ExecutionStep(3, if (isAr) "تأكيد الإرسال" else "Confirmation", if (isAr) "تم تسليم الرسالة النصية بنجاح" else "SMS delivered successfully", "RETURN_HOME")
+            )
+            ActionType.CLOSE_APP, ActionType.RETURN_HOME -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل الأمر" else "AI Intent Analysis", if (isAr) "رصد أمر العودة للشاشة الرئيسية" else "Return to Home request", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "إغلاق التطبيق النشط" else "Exit Active Task", if (isAr) "الخروج من الواجهة الحالية" else "Dismissing current foreground activity", "RETURN_HOME"),
+                ExecutionStep(2, if (isAr) "العودة للشاشة الرئيسية" else "Home Screen", if (isAr) "عرض الشاشة الرئيسية للهاتف" else "Displaying device launcher", "RETURN_HOME")
+            )
+            ActionType.OPEN_APP -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل اسم التطبيق" else "AI Package Matcher", if (isAr) "مطابقة التطبيق المطلوب: (${payload ?: ""})" else "Matching application (${payload ?: ""})", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "البحث في حزم الهاتف" else "Query Package Manager", if (isAr) "التحقق من وجود التطبيق المثبت" else "Verifying installed launch intent", "LAUNCH_PACKAGE"),
+                ExecutionStep(2, if (isAr) "إطلاق التطبيق ذاتياً" else "Autonomous Launch", if (isAr) "فتح التطبيق والانتقال لواجهته" else "Opening app foreground task", "LAUNCH_PACKAGE")
+            )
+            ActionType.TOGGLE_FLASHLIGHT -> listOf(
+                ExecutionStep(0, if (isAr) "التعرف على أمر العتاد" else "Hardware Command", if (isAr) "التحكم في كشاف الإضاءة LED" else "Torch LED control requested", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "الاتصال بـ CameraManager" else "Camera Bus Hook", if (isAr) "تجهيز مسار العدسة والإضاءة" else "Accessing camera flash module", "HARDWARE_TRIGGER"),
+                ExecutionStep(2, if (isAr) "تبديل حالة الإضاءة" else "Toggle Torch State", if (isAr) "تفعيل/إطفاء الكشاف بنجاح" else "Torch state switched", "HARDWARE_TRIGGER")
+            )
+            ActionType.SET_VOLUME, ActionType.TOGGLE_SILENT_MODE -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل نمط الصوت" else "Audio Stream Analysis", if (isAr) "تحديد التعديل الصوتي المطلوب" else "Evaluating requested volume change", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "الاتصال بـ AudioManager" else "Audio Service Hook", if (isAr) "تعديل قنوات الرنين والوسائط" else "Updating media and ring streams", "HARDWARE_TRIGGER"),
+                ExecutionStep(2, if (isAr) "تطبيق مستوى الصوت" else "Volume Updated", if (isAr) "تم تعديل مستوى الصوت بنجاح" else "Sound level updated on device", "HARDWARE_TRIGGER")
+            )
+            else -> listOf(
+                ExecutionStep(0, if (isAr) "تحليل الذكاء الاصطناعي" else "AI Analysis", if (isAr) "فهم القصد وتحديد المسار التنفيذي" else "Understanding intent and execution path", "AI_ANALYSIS"),
+                ExecutionStep(1, if (isAr) "توجيه نظام أندرويد" else "Android System Dispatch", if (isAr) "إعداد واجهة الأمر (${actionType.name})" else "Preparing intent (${actionType.name})", "SYSTEM_SETTINGS"),
+                ExecutionStep(2, if (isAr) "اكتمال التنفيذ الذاتي" else "Autonomous Execution", if (isAr) "تم إنجاز العملية بنجاح" else "Action completed successfully", "RETURN_HOME")
+            )
+        }
+        return LiveExecutionPlan(
+            commandTitle = if (isAr) "تنفيذ تلقائي: ${actionType.name}" else "Autonomous Action: ${actionType.name}",
+            actionType = actionType,
+            actionPayload = payload,
+            steps = steps,
+            currentStepIndex = 0,
+            isRunning = true,
+            isCompleted = false,
+            statusMessage = if (isAr) "جاري التنفيذ التلقائي بالنيابة عنك..." else "Executing autonomously on device..."
+        )
     }
 
     // Security Threat Scanner

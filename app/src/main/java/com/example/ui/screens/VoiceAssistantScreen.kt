@@ -24,14 +24,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
@@ -70,6 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.entity.ActionType
 import com.example.ui.ConversationMessage
 import com.example.ui.MainViewModel
+import com.example.ui.components.AutonomousExecutionVisualizer
 import com.example.ui.components.NeuralOrbVisualizer
 import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishGlow
@@ -102,6 +108,7 @@ fun VoiceAssistantScreen(
     val isBackgroundActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
     val isUsingFallback by viewModel.voiceEngine.isUsingFallbackAcousticEngine.collectAsStateWithLifecycle()
+    val activeExecutionPlan by viewModel.activeExecutionPlan.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -313,13 +320,23 @@ fun VoiceAssistantScreen(
         ) {
             QuickPhoneActionButton(
                 icon = Icons.Default.Call,
-                label = s("اتصال", "Call"),
+                label = s("اتصال هاتف", "Call"),
                 onClick = { viewModel.executeAction(ActionType.CALL_CONTACT, "0000000") }
             )
             QuickPhoneActionButton(
+                icon = Icons.Default.CallEnd,
+                label = s("إنهاء المكالمة", "End Call"),
+                onClick = { viewModel.executeEndCall() }
+            )
+            QuickPhoneActionButton(
                 icon = Icons.Default.Message,
-                label = s("رسائل", "SMS"),
+                label = s("رسائل SMS", "SMS"),
                 onClick = { viewModel.executeAction(ActionType.SEND_MESSAGE) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Home,
+                label = s("الرئيسية / إغلاق", "Home / Exit"),
+                onClick = { viewModel.executeReturnHome() }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.Email,
@@ -335,29 +352,57 @@ fun VoiceAssistantScreen(
                 }
             )
             QuickPhoneActionButton(
+                icon = Icons.Default.PhotoLibrary,
+                label = s("الصور / المعرض", "Gallery"),
+                onClick = { viewModel.executeAction(ActionType.OPEN_GALLERY) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Calculate,
+                label = s("آلة حاسبة", "Calculator"),
+                onClick = { viewModel.executeAction(ActionType.OPEN_CALCULATOR) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Map,
+                label = s("الخرائط", "Maps"),
+                onClick = { viewModel.executeAction(ActionType.OPEN_MAPS) }
+            )
+            QuickPhoneActionButton(
                 icon = Icons.Default.FlashlightOn,
-                label = s("تشغيل الكشاف", "Flashlight"),
+                label = s("الكشاف", "Flashlight"),
                 onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.CameraAlt,
-                label = s("فتح الكاميرا", "Camera"),
+                label = s("الكاميرا", "Camera"),
                 onClick = { viewModel.executeAction(ActionType.OPEN_CAMERA) }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.VolumeOff,
-                label = s("الوضع الصامت", "Silent Mode"),
+                label = s("الصامت", "Silent"),
                 onClick = { viewModel.executeAction(ActionType.TOGGLE_SILENT_MODE) }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.Wifi,
-                label = s("إعدادات Wi-Fi", "Wi-Fi"),
+                label = s("Wi-Fi", "Wi-Fi"),
                 onClick = { viewModel.executeAction(ActionType.OPEN_WIFI_SETTINGS) }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.Settings,
-                label = s("إعدادات الهاتف", "Settings"),
+                label = s("الإعدادات", "Settings"),
                 onClick = { viewModel.executeAction(ActionType.OPEN_SETTINGS) }
+            )
+        }
+
+        // Live Autonomous Phone Execution Visualizer
+        activeExecutionPlan?.let { plan ->
+            Spacer(modifier = Modifier.height(6.dp))
+            AutonomousExecutionVisualizer(
+                plan = plan,
+                isArabic = isAr,
+                onDismiss = { viewModel.dismissExecutionPlan() },
+                onReturnHome = { viewModel.executeReturnHome() },
+                onEndCall = { viewModel.executeEndCall() },
+                onReplay = { viewModel.executeAction(plan.actionType, plan.actionPayload) }
             )
         }
 
