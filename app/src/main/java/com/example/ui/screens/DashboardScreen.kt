@@ -21,13 +21,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
@@ -39,6 +46,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -79,6 +87,7 @@ import com.example.ui.theme.PolishTextMuted
 import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
 import com.example.ui.theme.PolishWarning
+import com.example.util.LocalizationManager
 
 @Composable
 fun DashboardScreen(
@@ -90,6 +99,10 @@ fun DashboardScreen(
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val isAuditing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
     val netTelemetry by viewModel.networkTelemetry.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+
+    fun s(ar: String, en: String): String = if (isAr) ar else en
 
     LazyColumn(
         modifier = modifier
@@ -156,36 +169,31 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "التحكم الذاتي متصل بالهاتف ✓",
+                                        text = s("التحكم الذاتي متصل بالهاتف ✓", "Autonomous Agent Connected ✓"),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = PolishSuccess,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        color = PolishSuccess
                                     )
                                 }
                             }
-
                             Text(
-                                text = "الأمان: ${metrics.healthScore}%",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = s("الاستماع الدائم مفعل", "Hands-Free Active"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = s("المساعد الصوتي الذاتي (${config.assistantName})", "Autonomous Assistant (${config.assistantName})"),
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
-                        }
-
-                        Column {
                             Text(
-                                text = "مركز تدقيق ومراقبة الهاتف والشبكة",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                fontSize = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "أرشفة شاملة للمدخلات، المخرجات، مشاركات LAN والمشاهدات",
+                                text = s("تحكم كامل: مكالمات، رسائل، ايميلات، تطبيقات، أمان بدون لمس", "Full Phone Access: Calls, SMS, Emails, Apps, Security hands-free"),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = PolishPrimaryContainer,
-                                fontSize = 12.sp
+                                color = Color.White.copy(alpha = 0.9f)
                             )
                         }
                     }
@@ -193,97 +201,126 @@ fun DashboardScreen(
             }
         }
 
-        // Live Telemetry Grid
+        // Quick Executive Actions (Call, SMS, Email, Camera, Flashlight, Silent, Scan)
         item {
-            val isBgActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
-            val context = androidx.compose.ui.platform.LocalContext.current
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("dashboard_bg_service_card"),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isBgActive) Color(0xFF10B981).copy(alpha = 0.12f) else PolishSurfaceElevated
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (isBgActive) Color(0xFF10B981).copy(alpha = 0.4f) else PolishSurfaceBorder
-                )
+                    .testTag("executive_actions_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(if (isBgActive) Color(0xFF10B981) else Color(0xFFEF4444))
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = if (isBgActive) "خدمة العمل في الخلفية نشطة 🟢" else "خدمة العمل في الخلفية متوقفة",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isBgActive) Color(0xFF10B981) else PolishTextPrimary
-                            )
-                            Text(
-                                text = "تلقي الأوامر الصوتية وتنفيذها حتى مع إغلاق الشاشة أو التطبيق (Foreground Service)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PolishTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                    Button(
-                        onClick = { viewModel.toggleBackgroundService(context) },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isBgActive) Color(0xFFEF4444) else Color(0xFF10B981)
-                        ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(36.dp)
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = s("تحكم مباشر بإمكانيات الهاتف", "Direct Phone Capabilities"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PolishTextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = if (isBgActive) "إيقاف" else "تفعيل",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color.White
+                        QuickActionItem(
+                            icon = Icons.Default.Call,
+                            label = s("اتصال", "Call"),
+                            color = Color(0xFF10B981),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.CALL_CONTACT, "0000000") }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.Message,
+                            label = s("رسائل", "SMS"),
+                            color = Color(0xFF3B82F6),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.SEND_MESSAGE) }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.Email,
+                            label = s("ايميل", "Email"),
+                            color = Color(0xFFA855F7),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.SEND_EMAIL) }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.CameraAlt,
+                            label = s("كاميرا", "Camera"),
+                            color = Color(0xFFF59E0B),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.OPEN_CAMERA) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        QuickActionItem(
+                            icon = Icons.Default.FlashlightOn,
+                            label = s("كشاف", "Torch"),
+                            color = Color(0xFFFACC15),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.VolumeOff,
+                            label = s("صامت", "Silent"),
+                            color = Color(0xFFEC4899),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.TOGGLE_SILENT_MODE) }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.Security,
+                            label = s("فحص أمان", "Scan"),
+                            color = Color(0xFF06B6D4),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.startFullSecurityScan() }
+                        )
+                        QuickActionItem(
+                            icon = Icons.Default.Settings,
+                            label = s("إعدادات", "Settings"),
+                            color = Color(0xFF64748B),
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.executeAction(ActionType.OPEN_SETTINGS) }
                         )
                     }
                 }
             }
         }
 
+        // Live Telemetry Gauges Grid
         item {
             Text(
-                text = "مؤشرات الهاتف الحيوية (Live Telemetry)",
+                text = s("مؤشرات أداء الهاتف والاتصال الحي", "Live System Telemetry"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = PolishTextPrimary
             )
-        }
+            Spacer(modifier = Modifier.height(6.dp))
 
-        item {
+            val estimatedCpu = (metrics.ramUsagePercent * 0.85f).toInt().coerceIn(12, 95)
+            val usedStorageGb = (metrics.totalStorageGb - metrics.freeStorageGb).coerceAtLeast(0f)
+            val storagePercent = if (metrics.totalStorageGb > 0f) ((usedStorageGb / metrics.totalStorageGb) * 100).toInt() else 40
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricGaugeCard(
-                    title = "البطارية والطاقة",
-                    value = "${metrics.batteryPercent}%",
-                    subValue = if (metrics.isCharging) "جاري الشحن ⚡" else "${metrics.batteryTemperatureCelsius}°C حرارة",
-                    icon = Icons.Default.BatteryChargingFull,
-                    accentColor = if (metrics.batteryPercent > 20) PolishSuccess else PolishWarning,
+                    title = s("المعالج", "CPU Load"),
+                    value = "$estimatedCpu%",
+                    subValue = if (estimatedCpu < 70) s("أداء مثالي", "Optimal") else s("ضغط مرتفع", "High"),
+                    icon = Icons.Default.Speed,
+                    accentColor = if (estimatedCpu < 70) PolishSuccess else PolishWarning,
                     modifier = Modifier.weight(1f)
                 )
                 MetricGaugeCard(
-                    title = "الذاكرة العشوائية RAM",
+                    title = s("الذاكرة", "RAM Usage"),
                     value = "${metrics.ramUsagePercent}%",
                     subValue = "${metrics.ramUsedMb} / ${metrics.ramTotalMb} MB",
                     icon = Icons.Default.Memory,
@@ -291,114 +328,38 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
 
-        item {
+            Spacer(modifier = Modifier.height(10.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricGaugeCard(
-                    title = "مساحة التخزين",
-                    value = String.format("%.1f GB", metrics.freeStorageGb),
-                    subValue = "متاح من ${String.format("%.1f", metrics.totalStorageGb)} GB",
-                    icon = Icons.Default.Storage,
-                    accentColor = PolishPrimary,
+                    title = s("البطارية", "Battery"),
+                    value = "${metrics.batteryPercent}%",
+                    subValue = if (metrics.isCharging) s("جاري الشحن ⚡", "Charging ⚡") else "${metrics.batteryTemperatureCelsius}°C",
+                    icon = Icons.Default.BatteryChargingFull,
+                    accentColor = if (metrics.batteryPercent > 20) PolishSuccess else PolishWarning,
                     modifier = Modifier.weight(1f)
                 )
                 MetricGaugeCard(
-                    title = "الشبكة المحلية LAN",
-                    value = netTelemetry?.localIp ?: "192.168.1.105",
-                    subValue = "${netTelemetry?.connectedLanDevices?.size ?: 4} أجهزة نشطة",
-                    icon = Icons.Default.Wifi,
+                    title = s("التخزين", "Storage"),
+                    value = "$storagePercent%",
+                    subValue = String.format(java.util.Locale.US, "%.1f GB ", metrics.freeStorageGb) + s("متاح", "Free"),
+                    icon = Icons.Default.Storage,
                     accentColor = PolishSecondary,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        // Local Network & Shared Media/Screen Streams
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
-                border = BorderStroke(1.dp, PolishSurfaceBorder)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Devices,
-                                contentDescription = null,
-                                tint = PolishPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "مراقبة الشبكة المحلية والأجهزة المتصلة",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = PolishTextPrimary
-                            )
-                        }
-                        Button(
-                            onClick = { viewModel.refreshLocalNetworkTelemetry() },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
-                            border = BorderStroke(1.dp, PolishSurfaceBorder),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                            modifier = Modifier.height(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = PolishPrimary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("تحديث", fontSize = 11.sp, color = PolishTextPrimary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val devices = netTelemetry?.connectedLanDevices ?: emptyList()
-                    devices.forEach { device ->
-                        LanDeviceRow(device = device)
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = "سجل المشاركات والوسائط وبث الشاشة النشط",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PolishTextPrimary
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val shares = netTelemetry?.recentShares ?: emptyList()
-                    shares.forEach { share ->
-                        LocalShareRow(share = share)
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-                }
-            }
-        }
-
-        // Quick Remote / Local Control Panel
+        // Local Network & Media Sharing Audit Card
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("control_panel_card"),
+                    .testTag("local_network_audit_card"),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
                 border = BorderStroke(1.dp, PolishSurfaceBorder)
@@ -409,18 +370,106 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(PolishSecondaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Router,
+                                    contentDescription = null,
+                                    tint = PolishSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = s("تدقيق الشبكة المحلية وبث الشاشة", "LAN Nodes & Stream Audit"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PolishTextPrimary
+                                )
+                                Text(
+                                    text = netTelemetry?.networkName?.let { s("متصل بشبكة: $it", "Connected: $it") } ?: s("مراقبة أجهزة ومشاركات Wi-Fi", "Wi-Fi audit active"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = PolishTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { viewModel.refreshLocalNetworkTelemetry() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = PolishSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Connected LAN Devices
+                    val devices = netTelemetry?.connectedLanDevices ?: emptyList()
+                    if (devices.isNotEmpty()) {
                         Text(
-                            text = "لوحة تنفيذ الأوامر بالنيابة عن المستخدم",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = s("الأجهزة المتصلة على نفس الشبكة (${devices.size}):", "Connected Devices (${devices.size}):"),
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = PolishTextPrimary
+                            color = PolishTextSecondary
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        devices.take(3).forEach { device ->
+                            LanDeviceRow(device = device, isAr = isAr)
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // AI Autonomous Audit Button & Summary
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ai_audit_trigger_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("التدقيق الشامل بالذكاء الاصطناعي", "AI Full System Audit"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("تحليل كافة بيانات الهاتف والاتصالات والأمان", "Audit all hardware, communication, and security streams"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+
                         Button(
                             onClick = { viewModel.runAiAudit() },
                             enabled = !isAuditing,
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.testTag("dashboard_audit_button")
+                            colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
+                            modifier = Modifier.testTag("run_audit_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -430,219 +479,107 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isAuditing) "جاري التدقيق..." else "تدقيق شامل AI",
+                                text = if (isAuditing) s("جاري التدقيق...", "Auditing...") else s("تدقيق فوري", "Run Audit"),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { viewModel.executeAction(ActionType.BATTERY_OPTIMIZATION) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_quick_battery_save"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
-                            border = BorderStroke(1.dp, PolishSurfaceBorder)
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.BatteryChargingFull,
-                                    contentDescription = null,
-                                    tint = PolishSuccess,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("توفير الطاقة", color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                            }
-                        }
-
-                        Button(
-                            onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_quick_flashlight"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
-                            border = BorderStroke(1.dp, PolishSurfaceBorder)
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.FlashlightOn,
-                                    contentDescription = null,
-                                    tint = PolishPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("الكشاف", color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                            }
-                        }
-
-                        Button(
-                            onClick = { viewModel.executeAction(ActionType.TOGGLE_SILENT_MODE) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_quick_silent_toggle"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishSurface),
-                            border = BorderStroke(1.dp, PolishSurfaceBorder)
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.VolumeOff,
-                                    contentDescription = null,
-                                    tint = PolishSecondary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("تبديل الصامت", color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
                 }
             }
         }
 
-        // Active Voice & Touch Shortcuts
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        // Shortcuts list
+        if (shortcuts.isNotEmpty()) {
+            item {
                 Text(
-                    text = "اختصارات التحكم الصوتي النشطة",
+                    text = s("أوامر واختصارات التحكم الذاتي السريعة", "Autonomous Shortcuts"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = PolishTextPrimary
                 )
-                Text(
-                    text = "${shortcuts.size} اختصار مسجل",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PolishTextMuted
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            items(shortcuts) { shortcut ->
+                ActionShortcutCard(
+                    shortcut = shortcut,
+                    onExecute = { viewModel.executeAction(shortcut.actionType, shortcut.payload, shortcut.id) },
+                    onDelete = { viewModel.deleteShortcut(shortcut.id) }
                 )
             }
         }
 
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                shortcuts.forEach { shortcut ->
-                    ActionShortcutCard(
-                        shortcut = shortcut,
-                        onExecute = {
-                            viewModel.executeAction(shortcut.actionType, shortcut.payload, shortcut.id)
-                        },
-                        onDelete = { viewModel.deleteShortcut(shortcut.id) }
-                    )
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun QuickActionItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+        modifier = modifier.height(64.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(imageVector = icon, contentDescription = label, tint = color, modifier = Modifier.size(22.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = label, color = PolishTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun LanDeviceRow(device: LanNodeDevice, isAr: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = PolishSurface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = when {
+                        device.deviceType.contains("شاشة") || device.deviceType.contains("TV") -> Icons.Default.Tv
+                        device.deviceType.contains("بوابة") || device.deviceType.contains("Router") -> Icons.Default.Router
+                        else -> Icons.Default.Devices
+                    },
+                    contentDescription = null,
+                    tint = PolishSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(text = device.name, color = PolishTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "${device.ip} • ${device.deviceType}", color = PolishTextSecondary, fontSize = 10.sp)
                 }
             }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-@Composable
-fun LanDeviceRow(device: LanNodeDevice) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = PolishSurface.copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, PolishSurfaceBorder.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (device.isGateway) Icons.Default.Router else if (device.name.contains("TV")) Icons.Default.Tv else Icons.Default.Devices,
-                contentDescription = null,
-                tint = PolishPrimary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = device.name,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = PolishTextPrimary
-                )
-                Text(
-                    text = "IP: ${device.ip}  •  ${device.deviceType}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PolishTextMuted,
-                    fontSize = 10.sp
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color(0xFF10B981).copy(alpha = 0.15f)
-            ) {
-                Text(
-                    text = "آمن ✓",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF10B981),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun LocalShareRow(share: LocalShareEvent) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = PolishSurface.copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, PolishSurfaceBorder.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (share.protocol.contains("Cast")) Icons.Default.Cast else Icons.Default.Share,
-                contentDescription = null,
-                tint = PolishSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = share.resourceName,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = PolishTextPrimary
-                )
-                Text(
-                    text = "${share.direction}  •  ${share.sourceOrTargetDevice}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PolishTextMuted,
-                    fontSize = 10.sp
-                )
-            }
             Text(
-                text = "مشفر",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = PolishPrimary
+                text = if (device.isAudited) (if (isAr) "مدقق ✓" else "Audited ✓") else (if (isAr) "جديد" else "New"),
+                color = if (device.isAudited) PolishSuccess else PolishWarning,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }

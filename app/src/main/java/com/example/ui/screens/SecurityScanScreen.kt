@@ -7,8 +7,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Warning
@@ -41,37 +38,49 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.system.ThreatCategory
 import com.example.system.ThreatItem
 import com.example.system.ThreatSeverity
 import com.example.ui.MainViewModel
+import com.example.ui.theme.PolishBackground
+import com.example.ui.theme.PolishPrimary
+import com.example.ui.theme.PolishSecondary
+import com.example.ui.theme.PolishSuccess
+import com.example.ui.theme.PolishSurfaceBorder
+import com.example.ui.theme.PolishSurfaceElevated
+import com.example.ui.theme.PolishTextPrimary
+import com.example.ui.theme.PolishTextSecondary
+import com.example.ui.theme.PolishWarning
+import com.example.util.LocalizationManager
 
 @Composable
 fun SecurityScanScreen(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
-    val isScanning by viewModel.isScanningSecurity.collectAsState()
-    val scanProgress by viewModel.securityScanProgress.collectAsState()
-    val scanStatusMsg by viewModel.securityScanStatusMessage.collectAsState()
-    val report by viewModel.lastSecurityReport.collectAsState()
+    val isScanning by viewModel.isScanningSecurity.collectAsStateWithLifecycle()
+    val scanProgress by viewModel.securityScanProgress.collectAsStateWithLifecycle()
+    val scanStatusMsg by viewModel.securityScanStatusMessage.collectAsStateWithLifecycle()
+    val report by viewModel.lastSecurityReport.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+    fun s(ar: String, en: String): String = if (isAr) ar else en
 
     val infiniteTransition = rememberInfiniteTransition(label = "radar_spin")
     val rotation by infiniteTransition.animateFloat(
@@ -94,6 +103,7 @@ fun SecurityScanScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
+            .background(PolishBackground)
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("security_scan_screen"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -102,10 +112,9 @@ fun SecurityScanScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
             ) {
                 Column(
                     modifier = Modifier
@@ -131,7 +140,7 @@ fun SecurityScanScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .rotate(rotation),
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = PolishPrimary
                             )
                         } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -142,10 +151,10 @@ fun SecurityScanScreen(
                                     color = scoreColor
                                 )
                                 Text(
-                                    text = if (currentScore >= 85) "آمن ومحمي" else "تنبيه أمني",
+                                    text = if (currentScore >= 85) s("آمن ومحمي", "Protected") else s("تنبيه أمني", "Warning"),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = PolishTextSecondary
                                 )
                             }
                         }
@@ -154,18 +163,18 @@ fun SecurityScanScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "مركز فحص الأمان ومكافحة الاختراق",
+                        text = s("مركز فحص الأمان ومكافحة الاختراق", "Security & Anti-Intrusion Center"),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = PolishTextPrimary
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = report?.systemStatusText ?: "جاهز لإجراء فحص شامل للهاتف وتدقيق التطبيقات والملفات الخبيثة.",
+                        text = report?.systemStatusText ?: s("جاهز لإجراء فحص شامل للهاتف وتدقيق التطبيقات والملفات الخبيثة.", "Ready to perform full-system security scan."),
                         fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = PolishTextSecondary,
                         textAlign = TextAlign.Center
                     )
 
@@ -181,25 +190,26 @@ fun SecurityScanScreen(
                             .testTag("start_security_scan_button"),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                            containerColor = PolishPrimary
                         )
                     ) {
                         if (isScanning) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = Color.White
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("جاري الفحص ($scanProgress%)...", fontWeight = FontWeight.Bold)
+                            Text(s("جاري الفحص ($scanProgress%)...", "Scanning ($scanProgress%)..."), fontWeight = FontWeight.Bold)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Security,
                                 contentDescription = "Scan",
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
+                                tint = Color.White
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("بدء فحص الأمان ومكافحة الاختراق", fontWeight = FontWeight.Bold)
+                            Text(s("بدء فحص الأمان ومكافحة الاختراق", "Start Full Security Scan"), fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -216,13 +226,13 @@ fun SecurityScanScreen(
                                     .fillMaxWidth()
                                     .height(6.dp)
                                     .clip(RoundedCornerShape(3.dp)),
-                                color = MaterialTheme.colorScheme.primary
+                                color = PolishPrimary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = scanStatusMsg,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = PolishPrimary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -239,21 +249,21 @@ fun SecurityScanScreen(
             ) {
                 SecurityStatBadge(
                     modifier = Modifier.weight(1f),
-                    title = "التطبيقات",
+                    title = s("التطبيقات", "Apps"),
                     count = report?.appsScannedCount ?: 42,
-                    subtitle = "مفحوصة"
+                    subtitle = s("مفحوصة", "Scanned")
                 )
                 SecurityStatBadge(
                     modifier = Modifier.weight(1f),
-                    title = "الملفات والوسائط",
+                    title = s("الملفات والوسائط", "Files"),
                     count = report?.filesScannedCount ?: 84,
-                    subtitle = "مدققة"
+                    subtitle = s("مدققة", "Audited")
                 )
                 SecurityStatBadge(
                     modifier = Modifier.weight(1f),
-                    title = "الاتصالات والمنافذ",
+                    title = s("الاتصالات والمنافذ", "Network Ports"),
                     count = report?.networkConnectionsScannedCount ?: 12,
-                    subtitle = "مؤمنة"
+                    subtitle = s("مؤمنة", "Secured")
                 )
             }
         }
@@ -261,10 +271,10 @@ fun SecurityScanScreen(
         // 3. System Integrity Diagnostic Cards
         item {
             Text(
-                text = "تدقيق سلامة النواة وحماية النظام",
+                text = s("تدقيق سلامة النواة وحماية النظام", "Core System Integrity Checks"),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = PolishTextPrimary,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -272,24 +282,24 @@ fun SecurityScanScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SecurityCheckRow(
-                    title = "صلاحيات الروت وتعديل النظام (Root / SU Check)",
+                    title = s("صلاحيات الروت وتعديل النظام (Root / SU Check)", "Root & Bootloader Integrity"),
                     isSafe = !(report?.isSystemIntegrityCompromised ?: false),
-                    detail = if (report?.isSystemIntegrityCompromised == true) "تم رصد ملفات روت مفتوحة" else "النظام مغلق ومحمي رسمياً"
+                    detail = if (report?.isSystemIntegrityCompromised == true) s("تم رصد ملفات روت مفتوحة", "Root access detected") else s("النظام مغلق ومحمي رسمياً", "Official verified build")
                 )
                 SecurityCheckRow(
-                    title = "تشفير التخزين والذاكرة (Storage Encryption)",
+                    title = s("تشفير التخزين والذاكرة (Storage Encryption)", "Hardware Storage Encryption"),
                     isSafe = true,
-                    detail = "التشفير التام AES-256 نشط لحماية بيانات الهاتف"
+                    detail = s("التشفير التام AES-256 نشط لحماية بيانات الهاتف", "Full-disk AES-256 active")
                 )
                 SecurityCheckRow(
-                    title = "تطبيقات التراكب والتجسس (Overlay & Accessibility)",
+                    title = s("تطبيقات التراكب والتجسس (Overlay & Accessibility)", "Screen Overlay & Spyware Guard"),
                     isSafe = report?.threatsFound?.none { it.category == ThreatCategory.MALICIOUS_APP } ?: true,
-                    detail = "مراقبة الصلاحيات الحساسة ومنع تسجيل الشاشة الخفي"
+                    detail = s("مراقبة الصلاحيات الحساسة ومنع تسجيل الشاشة الخفي", "Protected against hidden overlays")
                 )
                 SecurityCheckRow(
-                    title = "حماية الشبكة المحلية والبروكسي (LAN / Proxy Guard)",
+                    title = s("حماية الشبكة المحلية والبروكسي (LAN / Proxy Guard)", "LAN & Proxy Integrity"),
                     isSafe = report?.threatsFound?.none { it.category == ThreatCategory.NETWORK_BREACH } ?: true,
-                    detail = "فحص منافذ الاتصال المفتوحة ومنع اعتراض حركة الإنترنت"
+                    detail = s("فحص منافذ الاتصال المفتوحة ومنع اعتراض حركة الإنترنت", "No unauthorized proxies active")
                 )
             }
         }
@@ -303,14 +313,14 @@ fun SecurityScanScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "التهديدات والملاحظات المكتشفة (${threats.size})",
+                    text = s("التهديدات والملاحظات المكتشفة (${threats.size})", "Detected Threats (${threats.size})"),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = PolishTextPrimary
                 )
                 if (threats.isNotEmpty() && threats.any { !it.isResolved }) {
                     Text(
-                        text = "يتطلب إجراءات حماية",
+                        text = s("يتطلب إجراءات حماية", "Action required"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFEF4444)
@@ -327,7 +337,8 @@ fun SecurityScanScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Color(0xFF10B981).copy(alpha = 0.08f)
-                    )
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.2f))
                 ) {
                     Row(
                         modifier = Modifier
@@ -344,15 +355,15 @@ fun SecurityScanScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = "الهاتف نظيف تماماً من أي ملفات أو تطبيقات خبيثة",
+                                text = s("الهاتف نظيف تماماً من أي ملفات أو تطبيقات خبيثة", "Device is fully clean and secure"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF065F46)
+                                color = Color(0xFF10B981)
                             )
                             Text(
-                                text = "كافة المدخلات والمخرجات ومشاركات الشبكة تحت المراقبة الآمنة بالذكاء الاصطناعي.",
+                                text = s("كافة المدخلات والمخرجات ومشاركات الشبكة تحت المراقبة الآمنة بالذكاء الاصطناعي.", "All inputs, outbound connections, and media streams are protected."),
                                 fontSize = 12.sp,
-                                color = Color(0xFF047857)
+                                color = PolishTextSecondary
                             )
                         }
                     }
@@ -362,6 +373,7 @@ fun SecurityScanScreen(
             items(threatList, key = { it.id }) { threat ->
                 ThreatItemCard(
                     threat = threat,
+                    isAr = isAr,
                     onNeutralize = { viewModel.neutralizeThreat(threat.id) }
                 )
             }
@@ -382,10 +394,9 @@ fun SecurityStatBadge(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+        border = BorderStroke(1.dp, PolishSurfaceBorder)
     ) {
         Column(
             modifier = Modifier
@@ -397,18 +408,18 @@ fun SecurityStatBadge(
                 text = "$count",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = PolishPrimary
             )
             Text(
                 text = title,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = PolishTextPrimary
             )
             Text(
                 text = subtitle,
                 fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = PolishTextSecondary
             )
         }
     }
@@ -422,8 +433,9 @@ fun SecurityCheckRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        shape = RoundedCornerShape(14.dp),
+        color = PolishSurfaceElevated,
+        border = BorderStroke(1.dp, PolishSurfaceBorder)
     ) {
         Row(
             modifier = Modifier
@@ -443,12 +455,12 @@ fun SecurityCheckRow(
                     text = title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = PolishTextPrimary
                 )
                 Text(
                     text = detail,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = PolishTextSecondary
                 )
             }
         }
@@ -458,6 +470,7 @@ fun SecurityCheckRow(
 @Composable
 fun ThreatItemCard(
     threat: ThreatItem,
+    isAr: Boolean,
     onNeutralize: () -> Unit
 ) {
     val containerBg = if (threat.isResolved) {
@@ -465,7 +478,7 @@ fun ThreatItemCard(
     } else when (threat.severity) {
         ThreatSeverity.CRITICAL -> Color(0xFFEF4444).copy(alpha = 0.08f)
         ThreatSeverity.WARNING -> Color(0xFFF59E0B).copy(alpha = 0.08f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        else -> PolishSurfaceElevated
     }
 
     val badgeColor = if (threat.isResolved) {
@@ -479,7 +492,8 @@ fun ThreatItemCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = containerBg)
+        colors = CardDefaults.cardColors(containerColor = containerBg),
+        border = BorderStroke(1.dp, PolishSurfaceBorder)
     ) {
         Column(
             modifier = Modifier
@@ -495,7 +509,7 @@ fun ThreatItemCard(
                     text = threat.title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = PolishTextPrimary,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -504,11 +518,11 @@ fun ThreatItemCard(
                     color = badgeColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = if (threat.isResolved) "تم التطهير ✓" else when (threat.severity) {
-                            ThreatSeverity.CRITICAL -> "تهديد عالي"
-                            ThreatSeverity.WARNING -> "تحذير"
-                            ThreatSeverity.SUSPICIOUS -> "مشبوه"
-                            ThreatSeverity.SECURE -> "آمن"
+                        text = if (threat.isResolved) (if (isAr) "تم التطهير ✓" else "Resolved ✓") else when (threat.severity) {
+                            ThreatSeverity.CRITICAL -> if (isAr) "تهديد عالي" else "Critical"
+                            ThreatSeverity.WARNING -> if (isAr) "تحذير" else "Warning"
+                            ThreatSeverity.SUSPICIOUS -> if (isAr) "مشبوه" else "Suspicious"
+                            ThreatSeverity.SECURE -> if (isAr) "آمن" else "Secure"
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -523,16 +537,16 @@ fun ThreatItemCard(
             Text(
                 text = threat.description,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = PolishTextSecondary
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "المسار / الحزمة: ${threat.targetPathOrPackage}",
+                text = (if (isAr) "المسار / الحزمة: " else "Target: ") + threat.targetPathOrPackage,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
+                color = PolishPrimary
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -547,10 +561,11 @@ fun ThreatItemCard(
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Fix",
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("عزل وتطهير التهديد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isAr) "عزل وتطهير التهديد" else "Neutralize Threat", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }

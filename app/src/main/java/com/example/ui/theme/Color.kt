@@ -2,46 +2,46 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Professional Polish Design Palette Tokens
-val PolishBackground = Color(0xFFFDF7FF)
-val PolishSurface = Color(0xFFF3EDF7)
-val PolishSurfaceElevated = Color(0xFFFFFFFF)
-val PolishSurfaceBorder = Color(0xFFE6E0E9)
-val PolishSurfaceBorderDark = Color(0xFFCAC4D0)
+// Obsidian Black & Charcoal Slate Luxury Design Palette Tokens
+val PolishBackground = Color(0xFF0B0C0E) // Pure deep obsidian black
+val PolishSurface = Color(0xFF13151A)    // Dark charcoal slate
+val PolishSurfaceElevated = Color(0xFF1A1D24) // Elevated metallic charcoal
+val PolishSurfaceBorder = Color(0xFF262B35)   // Refined slate graphite border
+val PolishSurfaceBorderDark = Color(0xFF333A47)
 
-val PolishPrimary = Color(0xFF6750A4)
-val PolishPrimaryDark = Color(0xFF4F378B)
-val PolishPrimaryContainer = Color(0xFFEADDFF)
-val PolishOnPrimaryContainer = Color(0xFF21005D)
+val PolishPrimary = Color(0xFFE2E8F0) // Sleek Platinum Silver
+val PolishPrimaryDark = Color(0xFF94A3B8)
+val PolishPrimaryContainer = Color(0xFF1E232E) // Dark slate container
+val PolishOnPrimaryContainer = Color(0xFFF1F5F9)
 
-val PolishSecondary = Color(0xFF625B71)
-val PolishSecondaryContainer = Color(0xFFE8DEF8)
-val PolishOnSecondaryContainer = Color(0xFF1D192B)
+val PolishSecondary = Color(0xFF94A3B8) // Slate Gray
+val PolishSecondaryContainer = Color(0xFF1C2029)
+val PolishOnSecondaryContainer = Color(0xFFE2E8F0)
 
-val PolishTertiary = Color(0xFF7D5260)
-val PolishTertiaryContainer = Color(0xFFFFD8E4)
+val PolishTertiary = Color(0xFF64748B)
+val PolishTertiaryContainer = Color(0xFF181B22)
 
-val PolishGlow = Color(0xFFD0BCFF)
-val PolishGlowSoft = Color(0x33D0BCFF)
+val PolishGlow = Color(0xFF38BDF8) // High-tech Cyan/Ice Blue Glow
+val PolishGlowSoft = Color(0x2638BDF8)
 
-val PolishTextPrimary = Color(0xFF1D1B20)
-val PolishTextSecondary = Color(0xFF49454F)
-val PolishTextMuted = Color(0xFF79747E)
+val PolishTextPrimary = Color(0xFFF8FAFC) // Crisp Platinum White
+val PolishTextSecondary = Color(0xFF94A3B8) // Slate Gray
+val PolishTextMuted = Color(0xFF64748B)     // Cool Charcoal Gray
 
-val PolishSuccess = Color(0xFF2E7D32)
-val PolishSuccessContainer = Color(0xFFE8F5E9)
-val PolishWarning = Color(0xFFE65100)
-val PolishWarningContainer = Color(0xFFFFF3E0)
-val PolishCritical = Color(0xFFB3261E)
-val PolishCriticalContainer = Color(0xFFF9DEDC)
+val PolishSuccess = Color(0xFF10B981) // Emerald Green
+val PolishSuccessContainer = Color(0xFF064E3B)
+val PolishWarning = Color(0xFFF59E0B) // Amber
+val PolishWarningContainer = Color(0xFF78350F)
+val PolishCritical = Color(0xFFEF4444) // Crimson Red
+val PolishCriticalContainer = Color(0xFF7F1D1D)
 
 // Backward compatible aliases
 val DarkBackground = PolishBackground
 val DarkSurface = PolishSurface
 val DarkSurfaceElevated = PolishSurfaceElevated
 val DarkSurfaceBorder = PolishSurfaceBorder
-val CyanNeon = PolishPrimary
-val CyanGlow = PolishPrimaryDark
+val CyanNeon = PolishGlow
+val CyanGlow = PolishGlowSoft
 val IndigoNeural = PolishPrimary
 val VioletAccent = PolishSecondary
 val EmeraldSafe = PolishSuccess
@@ -50,4 +50,3 @@ val RoseCritical = PolishCritical
 val TextPrimary = PolishTextPrimary
 val TextSecondary = PolishTextSecondary
 val TextMuted = PolishTextMuted
-

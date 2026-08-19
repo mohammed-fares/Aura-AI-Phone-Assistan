@@ -18,6 +18,7 @@ import com.example.system.LocalNetworkTelemetry
 import com.example.system.SecurityScanReport
 import com.example.system.ThreatItem
 import com.example.system.VoiceprintVerificationResult
+import com.example.util.LocalizationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,6 +83,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val voiceprints: StateFlow<List<VoiceprintEntity>> = repository.voiceprints
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Active Language
+    private val _appLanguage = MutableStateFlow("system")
+    val appLanguage: StateFlow<String> = _appLanguage.asStateFlow()
+
     // Live Device Metrics
     private val _deviceMetrics = MutableStateFlow(telemetryManager.getLiveMetrics())
     val deviceMetrics: StateFlow<DeviceMetrics> = _deviceMetrics.asStateFlow()
@@ -97,7 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _securityScanProgress = MutableStateFlow(0)
     val securityScanProgress: StateFlow<Int> = _securityScanProgress.asStateFlow()
 
-    private val _securityScanStatusMessage = MutableStateFlow("جاهز لبدء الفحص الأمني الشامل")
+    private val _securityScanStatusMessage = MutableStateFlow("جاهز لبدء الفحص الأمني الشامل / Ready for security scan")
     val securityScanStatusMessage: StateFlow<String> = _securityScanStatusMessage.asStateFlow()
 
     private val _lastSecurityReport = MutableStateFlow<SecurityScanReport?>(null)
@@ -117,14 +122,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isRecordingEnrollment: StateFlow<Boolean> = _isRecordingEnrollment.asStateFlow()
 
     // Conversation & Action State
-    private val _conversation = MutableStateFlow<List<ConversationMessage>>(
-        listOf(
-            ConversationMessage(
-                text = "وضع الاستماع الدائم والتحكم الذاتي نشط 🟢. الهاتف يستمع إليك تلقائياً وبمجرد التحدث سينفذ الأمر مباشرة بالنيابة عنك بصمت بدون لمس الشاشة.",
-                isUser = false
-            )
-        )
-    )
+    private val _conversation = MutableStateFlow<List<ConversationMessage>>(emptyList())
     val conversation: StateFlow<List<ConversationMessage>> = _conversation.asStateFlow()
 
     private val _isProcessingAi = MutableStateFlow(false)
@@ -143,9 +141,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var hasAutoStartedListening = false
 
     init {
+        initWelcomeMessage()
         startTelemetryRefresher()
         refreshLocalNetworkTelemetry()
         startInitialSecurityQuickCheck()
+        observeConfigLanguage()
+    }
+
+    private fun initWelcomeMessage() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        val welcome = if (isAr) {
+            "وضع الاستماع والتحكم الذاتي نشط 🟢. الهاتف ينفذ الأوامر (اتصال، رسائل، ايميلات، تطبيقات، إعدادات، أمان) بالنيابة عنك دون لمس الشاشة."
+        } else {
+            "Autonomous Phone Executive Agent Active 🟢. The assistant is listening hands-free to execute calls, messages, emails, apps, settings, and security scans on your behalf."
+        }
+        _conversation.value = listOf(ConversationMessage(text = welcome, isUser = false))
+    }
+
+    private fun observeConfigLanguage() {
+        viewModelScope.launch {
+            assistantConfig.collect { cfg ->
+                if (cfg.appLanguage != _appLanguage.value) {
+                    _appLanguage.value = cfg.appLanguage
+                    voiceEngine.setLanguage(cfg.appLanguage)
+                }
+            }
+        }
+    }
+
+    fun setAppLanguage(lang: String) {
+        _appLanguage.value = lang
+        voiceEngine.setLanguage(lang)
+        viewModelScope.launch {
+            val cfg = assistantConfig.value
+            repository.updateConfig(cfg.copy(appLanguage = lang))
+        }
     }
 
     private fun startTelemetryRefresher() {
@@ -171,7 +201,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun startInitialSecurityQuickCheck() {
         viewModelScope.launch {
             try {
-                // Quick default report on app init
                 val defaultReport = SecurityScanReport(
                     totalItemsScanned = 138,
                     threatsFound = emptyList(),
@@ -179,7 +208,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     filesScannedCount = 84,
                     networkConnectionsScannedCount = 12,
                     securityScore = 98,
-                    systemStatusText = "النظام مؤمن بالكامل. لم يتم رصد أي برمجيات خبيثة أو اتصالات مشبوهة.",
+                    systemStatusText = if (LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar")
+                        "النظام مؤمن بالكامل. لم يتم رصد أي برمجيات خبيثة أو اتصالات مشبوهة."
+                    else "System is fully secure. 0 threats detected.",
                     isSystemIntegrityCompromised = false
                 )
                 _lastSecurityReport.value = defaultReport
@@ -190,46 +221,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updatePermissionsState(grantedMap: Map<String, Boolean>) {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         val permissions = listOf(
             AppPermissionInfo(
                 permission = android.Manifest.permission.RECORD_AUDIO,
-                title = "الميكروفون والتعرف الصوتي",
-                description = "للإصغاء الدائم والتنفيذ الفوري للأوامر الصوتية بالنيابة عنك دون لمس الهاتف.",
+                title = if (isAr) "الميكروفون والتعرف الصوتي" else "Microphone & Voice Engine",
+                description = if (isAr) "للإصغاء الدائم والتنفيذ الفوري للأوامر الصوتية بالنيابة عنك دون لمس الهاتف." else "Hands-free continuous listening and voice command execution.",
                 isGranted = grantedMap[android.Manifest.permission.RECORD_AUDIO] == true,
                 iconName = "mic"
             ),
             AppPermissionInfo(
                 permission = android.Manifest.permission.ACCESS_NETWORK_STATE,
-                title = "الشبكة والاتصالات المحلية",
-                description = "لمراقبة وتدقيق الأجهزة المتصلة ومشاركات الملفات والشاشة على الشبكة المحلية.",
+                title = if (isAr) "الشبكة والاتصالات المحلية" else "Local Network & Wi-Fi",
+                description = if (isAr) "لمراقبة وتدقيق الأجهزة المتصلة ومشاركات الملفات والشاشة على الشبكة المحلية." else "Monitor LAN devices, media streams, and screen shares.",
                 isGranted = grantedMap[android.Manifest.permission.ACCESS_NETWORK_STATE] == true,
                 iconName = "wifi"
             ),
             AppPermissionInfo(
                 permission = android.Manifest.permission.READ_PHONE_STATE,
-                title = "حالة الهاتف والاتصالات",
-                description = "لأرشفة وتدقيق حالة المكالمات والشبكة ومراقبة الاستجابة.",
+                title = if (isAr) "حالة الهاتف والاتصالات" else "Phone State & Calls",
+                description = if (isAr) "لأرشفة وتدقيق حالة المكالمات والشبكة ومراقبة الاستجابة." else "Direct calling and communication access.",
                 isGranted = grantedMap[android.Manifest.permission.READ_PHONE_STATE] == true,
                 iconName = "phone"
             ),
             AppPermissionInfo(
                 permission = android.Manifest.permission.READ_CONTACTS,
-                title = "جهات الاتصال",
-                description = "لإجراء المكالمات وإرسال الرسائل الصوتية للأسماء المطلوبة فوراً.",
+                title = if (isAr) "جهات الاتصال" else "Contacts",
+                description = if (isAr) "لإجراء المكالمات وإرسال الرسائل الصوتية للأسماء المطلوبة فوراً." else "Fast dial and message dispatch to contacts.",
                 isGranted = grantedMap[android.Manifest.permission.READ_CONTACTS] == true,
                 iconName = "contacts"
             ),
             AppPermissionInfo(
                 permission = android.Manifest.permission.POST_NOTIFICATIONS,
-                title = "الإشعارات والتنبيهات",
-                description = "لإرسال تنبيهات الأمان ومكافحة الاختراق وتدقيق الهاتف.",
+                title = if (isAr) "الإشعارات والتنبيهات" else "Notifications",
+                description = if (isAr) "لإرسال تنبيهات الأمان ومكافحة الاختراق وتدقيق الهاتف." else "Security alert dispatch and background status updates.",
                 isGranted = grantedMap[android.Manifest.permission.POST_NOTIFICATIONS] == true,
                 iconName = "notifications"
             )
         )
         _permissionsState.value = permissions
 
-        // Auto-start hands-free listening if mic is granted and enabled in config
         if (grantedMap[android.Manifest.permission.RECORD_AUDIO] == true && !hasAutoStartedListening) {
             hasAutoStartedListening = true
             startHandsFreeAutoListening()
@@ -238,6 +269,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startHandsFreeAutoListening() {
         voiceEngine.startContinuousListening(
+            language = _appLanguage.value,
             onResult = { recognizedText, rmsHistory ->
                 handleUserVoiceInput(recognizedText, rmsHistory)
             },
@@ -248,20 +280,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleVoiceListening() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         if (voiceEngine.isListening.value) {
             voiceEngine.stopListening()
-            _systemStatusNotice.value = "تم إيقاف الاستماع الصوتي مؤقتاً."
+            _systemStatusNotice.value = if (isAr) "تم إيقاف الاستماع الصوتي مؤقتاً." else "Listening paused."
         } else {
             actionEngine.vibratePhone(50L)
             startHandsFreeAutoListening()
-            _systemStatusNotice.value = "المساعد يستمع الآن بشكل دائم وتلقائي."
+            _systemStatusNotice.value = if (isAr) "المساعد يستمع الآن بشكل دائم وتلقائي." else "Assistant is actively listening."
         }
     }
 
     fun startBackgroundService(context: android.content.Context) {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         com.example.service.AssistantForegroundService.startService(context)
         actionEngine.vibratePhone(80L)
-        _systemStatusNotice.value = "تم تشغيل المساعد في الخلفية بنجاح 🟢 (يعمل حتى مع إغلاق الشاشة أو التطبيق)"
+        _systemStatusNotice.value = if (isAr)
+            "تم تشغيل المساعد في الخلفية بنجاح 🟢 (يعمل حتى مع إغلاق الشاشة أو التطبيق)"
+        else "Background service active 🟢 (Runs even when screen is locked or app closed)"
         viewModelScope.launch {
             val config = assistantConfig.value
             repository.updateConfig(config.copy(backgroundServiceEnabled = true))
@@ -269,9 +305,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopBackgroundService(context: android.content.Context) {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         com.example.service.AssistantForegroundService.stopService(context)
         actionEngine.vibratePhone(50L)
-        _systemStatusNotice.value = "تم إيقاف تشغيل المساعد في الخلفية."
+        _systemStatusNotice.value = if (isAr) "تم إيقاف تشغيل المساعد في الخلفية." else "Background service stopped."
         viewModelScope.launch {
             val config = assistantConfig.value
             repository.updateConfig(config.copy(backgroundServiceEnabled = false))
@@ -288,6 +325,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleUserVoiceInput(rawInput: String, rmsHistory: List<Float> = emptyList()) {
         if (rawInput.isBlank()) return
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
 
         viewModelScope.launch {
             _isProcessingAi.value = true
@@ -305,7 +343,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isMatch = true,
                     confidenceScore = 1.0f,
                     matchPercentage = 100,
-                    message = "التحكم المباشر مصرح به"
+                    message = if (isAr) "التحكم المباشر مصرح به" else "Authorized"
                 )
             }
             _lastVoiceprintVerification.value = verification
@@ -318,21 +356,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _conversation.value = _conversation.value + userMsg
 
-            // If voiceprint check failed in strict mode -> block command execution
             if (!verification.isMatch) {
                 _isProcessingAi.value = false
                 actionEngine.vibratePhone(300L)
                 val alertMsg = ConversationMessage(
-                    text = "⚠️ تنبيه أمني: تم رفض تنفيذ الأمر. بصمة الصوت غير معتمدة لمالك الهاتف (نسبة التطابق: ${verification.matchPercentage}%).",
+                    text = if (isAr)
+                        "⚠️ تنبيه أمني: تم رفض تنفيذ الأمر. بصمة الصوت غير معتمدة لمالك الهاتف (نسبة التطابق: ${verification.matchPercentage}%)."
+                    else "⚠️ Security Notice: Voiceprint mismatch (${verification.matchPercentage}% match). Action blocked.",
                     isUser = false,
                     biometricVerified = false
                 )
                 _conversation.value = _conversation.value + alertMsg
-                _systemStatusNotice.value = "تم حظر الأمر: بصمة الصوت غير مطابقة للمالك."
+                _systemStatusNotice.value = if (isAr) "تم حظر الأمر: بصمة الصوت غير مطابقة للمالك." else "Action blocked: Voiceprint unauthorized."
                 repository.logTelemetry(
                     type = TelemetryType.SYSTEM_PERFORMANCE,
-                    title = "محاولة تحكم بصوت غير مصرح",
-                    description = "تم حظر الأمر الصوتي: $rawInput (تطابق ${verification.matchPercentage}%)",
+                    title = if (isAr) "محاولة تحكم بصوت غير مصرح" else "Unauthorized Voice Control Attempt",
+                    description = "$rawInput (match: ${verification.matchPercentage}%)",
                     severity = TelemetrySeverity.CRITICAL,
                     aiAudited = true
                 )
@@ -353,7 +392,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _conversation.value = _conversation.value + assistantMsg
 
-                // User requested: "لا أريد أن التطبيق أن يتكلم" -> Default is silent execution
                 if (config.voiceFeedbackEnabled) {
                     voiceEngine.speak(
                         text = parsed.responseSpeechText,
@@ -372,7 +410,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     executeAction(action, parsed.actionPayload)
                 }
             } catch (e: Exception) {
-                _systemStatusNotice.value = "حدث خطأ في معالجة الأمر: ${e.message}"
+                _systemStatusNotice.value = "Error: ${e.message}"
             } finally {
                 _isProcessingAi.value = false
             }
@@ -380,12 +418,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executeAction(actionType: ActionType, payload: String? = null, shortcutId: Long? = null) {
-        actionEngine.executeAction(actionType, payload) { feedback ->
+        actionEngine.executeAction(actionType, payload, _appLanguage.value) { feedback ->
             _systemStatusNotice.value = feedback
             viewModelScope.launch {
                 repository.logTelemetry(
                     type = TelemetryType.TOUCH_GESTURE,
-                    title = "تحكم وتنفيذ ذاتي: $actionType",
+                    title = "$actionType",
                     description = feedback,
                     severity = TelemetrySeverity.OPTIMAL,
                     aiAudited = true
@@ -398,10 +436,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Security Threat Scanner
     fun startFullSecurityScan() {
         if (_isScanningSecurity.value) return
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+
         viewModelScope.launch {
             _isScanningSecurity.value = true
             _securityScanProgress.value = 0
-            _securityScanStatusMessage.value = "بدء الفحص الأمني الشامل..."
+            _securityScanStatusMessage.value = if (isAr) "بدء الفحص الأمني الشامل..." else "Starting deep security scan..."
             actionEngine.vibratePhone(80L)
 
             try {
@@ -410,18 +450,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _securityScanStatusMessage.value = status
                 }
                 _lastSecurityReport.value = report
-                _systemStatusNotice.value = "اكتمل فحص الأمان: ${report.systemStatusText}"
+                _systemStatusNotice.value = "${report.systemStatusText}"
 
                 repository.logTelemetry(
                     type = TelemetryType.SYSTEM_PERFORMANCE,
-                    title = "فحص الأمان ومكافحة الاختراق",
-                    description = "تم فحص ${report.totalItemsScanned} عنصراً. التهديدات: ${report.threatsFound.size}. درجة الأمان: ${report.securityScore}%",
+                    title = if (isAr) "فحص الأمان ومكافحة الاختراق" else "System Security Scan",
+                    description = "Scanned: ${report.totalItemsScanned} items. Threats: ${report.threatsFound.size}. Score: ${report.securityScore}%",
                     severity = if (report.threatsFound.isEmpty()) TelemetrySeverity.OPTIMAL else TelemetrySeverity.WARNING,
                     aiAudited = true,
                     aiAnnotation = report.systemStatusText
                 )
             } catch (e: Exception) {
-                _securityScanStatusMessage.value = "حدث خطأ أثناء الفحص: ${e.message}"
+                _securityScanStatusMessage.value = "Scan error: ${e.message}"
             } finally {
                 _isScanningSecurity.value = false
             }
@@ -429,6 +469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun neutralizeThreat(threatId: String) {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         val report = _lastSecurityReport.value ?: return
         val updatedThreats = report.threatsFound.map {
             if (it.id == threatId) it.copy(isResolved = true) else it
@@ -439,16 +480,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _lastSecurityReport.value = report.copy(
             threatsFound = updatedThreats,
             securityScore = newScore,
-            systemStatusText = if (remainingUnresolved == 0) "تم تحييد وتطهير كافة التهديدات بنجاح! الهاتف آمن 100%." else report.systemStatusText
+            systemStatusText = if (remainingUnresolved == 0) {
+                if (isAr) "تم تحييد وتطهير كافة التهديدات بنجاح! الهاتف آمن 100%." else "All threats resolved! Device 100% secure."
+            } else report.systemStatusText
         )
         actionEngine.vibratePhone(120L)
-        _systemStatusNotice.value = "تم عزل وتحييد التهديد الأمني بنجاح."
+        _systemStatusNotice.value = if (isAr) "تم عزل وتحييد التهديد الأمني بنجاح." else "Threat neutralized successfully."
 
         viewModelScope.launch {
             repository.logTelemetry(
                 type = TelemetryType.SYSTEM_PERFORMANCE,
-                title = "تطهير تهديد أمني",
-                description = "تم عزل ومعالجة التهديد $threatId واستعادة حماية النظام.",
+                title = if (isAr) "تطهير تهديد أمني" else "Threat Resolved",
+                description = "Neutralized threat $threatId",
                 severity = TelemetrySeverity.OPTIMAL,
                 aiAudited = true
             )
@@ -469,11 +512,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun recordEnrollmentSample(step: Int) {
         if (_isRecordingEnrollment.value) return
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         _isRecordingEnrollment.value = true
         val phrase = voiceprintManager.defaultEnrollmentPhrases.getOrElse(step) { "أنا المالك المعتمد لهذا الهاتف" }
 
         actionEngine.vibratePhone(60L)
         voiceEngine.startListening(
+            language = _appLanguage.value,
             onResult = { recordedText ->
                 _isRecordingEnrollment.value = false
                 viewModelScope.launch {
@@ -486,7 +531,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     actionEngine.vibratePhone(100L)
 
                     if (step >= 2) {
-                        // Finished all 3 samples!
                         _isEnrollingVoiceprint.value = false
                         _enrollmentStep.value = 0
                         val config = assistantConfig.value
@@ -496,21 +540,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 biometricVoiceprintEnabled = true
                             )
                         )
-                        _systemStatusNotice.value = "تم تسجيل بصمة صوت المالك بنجاح! تم قفل الأوامر التنفيذية على صوتك فقط."
+                        _systemStatusNotice.value = if (isAr) "تم تسجيل بصمة صوت المالك بنجاح! الأوامر التنفيذية مخصصة لصوتك فقط." else "Voiceprint registered! Executive actions locked to your voice."
                     } else {
                         _enrollmentStep.value = step + 1
-                        _systemStatusNotice.value = "تم حفظ العينة ${step + 1} بنجاح. انتقل للعبارة التالية."
+                        _systemStatusNotice.value = if (isAr) "تم حفظ العينة ${step + 1} بنجاح." else "Sample ${step + 1} saved."
                     }
                 }
             },
             onError = { error ->
                 _isRecordingEnrollment.value = false
-                _systemStatusNotice.value = "تعذر تسجيل العينة: $error"
+                _systemStatusNotice.value = "Error: $error"
             }
         )
     }
 
     fun resetVoiceprintProfile() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         viewModelScope.launch {
             voiceprintManager.clearVoiceprintData()
             val config = assistantConfig.value
@@ -521,19 +566,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             _lastVoiceprintVerification.value = null
-            _systemStatusNotice.value = "تمت إعادة ضبط بصمة الصوت البيومترية."
+            _systemStatusNotice.value = if (isAr) "تمت إعادة ضبط بصمة الصوت البيومترية." else "Voiceprint reset."
         }
     }
 
     fun runAiAudit() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
         viewModelScope.launch {
             _isProcessingAi.value = true
             actionEngine.vibratePhone(100L)
             try {
                 val result = repository.runAiAuditAndArchiving()
-                _systemStatusNotice.value = "اكتمل التدقيق الشامل بواسطة الذكاء الاصطناعي بنجاح."
+                _systemStatusNotice.value = if (isAr) "اكتمل التدقيق الشامل بواسطة الذكاء الاصطناعي بنجاح." else "AI Audit completed."
                 val auditMsg = ConversationMessage(
-                    text = "تقرير تدقيق الهاتف والشبكة والأمان:\n${result.healthSummary}",
+                    text = result.healthSummary,
                     isUser = false,
                     actionType = ActionType.AI_SUMMARIZE_ACTIVITY
                 )
@@ -542,7 +588,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     voiceEngine.speak(result.healthSummary)
                 }
             } catch (e: Exception) {
-                _systemStatusNotice.value = "تعذر إكمال التدقيق: ${e.message}"
+                _systemStatusNotice.value = "Audit error: ${e.message}"
             } finally {
                 _isProcessingAi.value = false
             }
@@ -552,7 +598,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAssistantConfig(newConfig: AssistantConfigEntity) {
         viewModelScope.launch {
             repository.updateConfig(newConfig)
-            _systemStatusNotice.value = "تم حفظ إعدادات المساعد (${newConfig.assistantName}) وتحديث نمط التحكم."
+            _systemStatusNotice.value = "Settings saved (${newConfig.assistantName})."
         }
     }
 
@@ -565,14 +611,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 payload = payload
             )
             repository.saveShortcut(shortcut)
-            _systemStatusNotice.value = "تمت إضافة الاختصار التنفيذي بنجاح."
+            _systemStatusNotice.value = "Shortcut added."
         }
     }
 
     fun deleteShortcut(id: Long) {
         viewModelScope.launch {
             repository.deleteShortcut(id)
-            _systemStatusNotice.value = "تم حذف الاختصار."
+            _systemStatusNotice.value = "Shortcut deleted."
         }
     }
 

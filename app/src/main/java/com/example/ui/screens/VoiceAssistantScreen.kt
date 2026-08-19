@@ -24,11 +24,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -80,6 +84,7 @@ import com.example.ui.theme.PolishSurfaceElevated
 import com.example.ui.theme.PolishTextMuted
 import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
+import com.example.util.LocalizationManager
 
 @Composable
 fun VoiceAssistantScreen(
@@ -94,9 +99,12 @@ fun VoiceAssistantScreen(
     val isProcessing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val conversation by viewModel.conversation.collectAsStateWithLifecycle()
-    val lastVerification by viewModel.lastVoiceprintVerification.collectAsStateWithLifecycle()
     val isBackgroundActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
-    val lastBackgroundStatus by viewModel.lastBackgroundStatus.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isUsingFallback by viewModel.voiceEngine.isUsingFallbackAcousticEngine.collectAsStateWithLifecycle()
+
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+    fun s(ar: String, en: String): String = if (isAr) ar else en
 
     var textInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
@@ -117,7 +125,7 @@ fun VoiceAssistantScreen(
     ) {
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 1. Background Execution Card & Biometric Status
+        // 1. Background Execution Card
         Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
@@ -149,14 +157,14 @@ fun VoiceAssistantScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = if (isBackgroundActive) "العمل في الخلفية نشط 🟢" else "العمل في الخلفية متوقف",
+                            text = if (isBackgroundActive) s("العمل في الخلفية نشط 🟢", "Background Execution Active 🟢") else s("العمل في الخلفية متوقف", "Background Service Paused"),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (isBackgroundActive) Color(0xFF10B981) else PolishTextPrimary,
                             fontSize = 12.sp
                         )
                         Text(
-                            text = if (isBackgroundActive) "يستمع وينفذ حتى لو أغلقت الشاشة أو التطبيق" else "اضغط لتشغيل الاستماع أثناء قفل الشاشة",
+                            text = if (isBackgroundActive) s("يستمع وينفذ حتى لو أغلقت الشاشة أو التطبيق", "Listens and acts even when locked or app closed") else s("اضغط لتشغيل الاستماع أثناء قفل الشاشة", "Tap to keep active in background"),
                             style = MaterialTheme.typography.bodySmall,
                             color = PolishTextSecondary,
                             fontSize = 10.sp
@@ -174,7 +182,7 @@ fun VoiceAssistantScreen(
                     modifier = Modifier.height(32.dp).testTag("btn_toggle_background_service")
                 ) {
                     Text(
-                        text = if (isBackgroundActive) "إيقاف الخلفية" else "تشغيل في الخلفية",
+                        text = if (isBackgroundActive) s("إيقاف", "Stop") else s("تشغيل في الخلفية", "Start in BG"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -208,7 +216,10 @@ fun VoiceAssistantScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isListening) "استماع دائم ونشط (بدون لمس)" else "الاستماع متوقف مؤقتاً",
+                        text = if (isListening) {
+                            if (isUsingFallback) s("استماع عبر المحرك الصوتي المدمج 🎙️", "In-App Acoustic Engine 🎙️")
+                            else s("استماع دائم ونشط (بدون لمس)", "Hands-Free Active (No Touch)")
+                        } else s("الاستماع متوقف مؤقتاً", "Listening Paused"),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (isListening) Color(0xFF10B981) else PolishTextPrimary
@@ -233,7 +244,7 @@ fun VoiceAssistantScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (config.voiceprintEnrolled) "بصمة صوت معتمدة ✓" else "بصمة الصوت عامة",
+                        text = if (config.voiceprintEnrolled) s("بصمة صوت معتمدة ✓", "Voiceprint Verified ✓") else s("بصمة عامة", "Open Voice"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishPrimary,
                         fontWeight = FontWeight.Bold
@@ -263,9 +274,9 @@ fun VoiceAssistantScreen(
 
         Text(
             text = when {
-                isListening -> "تحدث بأي أمر بصوتك وسينفذه الهاتف فوراً بالنيابة عنك"
-                isProcessing -> "جاري تحليل الأمر والتحكم بالهاتف بصمت..."
-                else -> "اضغط لإعادة تفعيل وضع الاستماع الدائم"
+                isListening -> s("تحدث بأي أمر بصوتك وسينفذه الهاتف فوراً بالنيابة عنك", "Speak any command and the phone will execute it hands-free")
+                isProcessing -> s("جاري تحليل الأمر والتحكم بالهاتف بصمت...", "Processing command and executing...")
+                else -> s("اضغط لإعادة تفعيل وضع الاستماع الدائم", "Tap to activate hands-free listening")
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (isListening) PolishPrimary else PolishTextSecondary,
@@ -293,7 +304,7 @@ fun VoiceAssistantScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 3. Autonomous Quick Phone Action Shortcuts (One-tap phone control)
+        // 3. Autonomous Quick Phone Action Shortcuts
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -301,8 +312,23 @@ fun VoiceAssistantScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             QuickPhoneActionButton(
+                icon = Icons.Default.Call,
+                label = s("اتصال", "Call"),
+                onClick = { viewModel.executeAction(ActionType.CALL_CONTACT, "0000000") }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Message,
+                label = s("رسائل", "SMS"),
+                onClick = { viewModel.executeAction(ActionType.SEND_MESSAGE) }
+            )
+            QuickPhoneActionButton(
+                icon = Icons.Default.Email,
+                label = s("ايميل", "Email"),
+                onClick = { viewModel.executeAction(ActionType.SEND_EMAIL) }
+            )
+            QuickPhoneActionButton(
                 icon = Icons.Default.Security,
-                label = "فحص الأمان",
+                label = s("فحص الأمان", "Security Scan"),
                 onClick = {
                     viewModel.executeAction(ActionType.SYSTEM_SECURITY_SCAN)
                     viewModel.startFullSecurityScan()
@@ -310,27 +336,27 @@ fun VoiceAssistantScreen(
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.FlashlightOn,
-                label = "تشغيل الكشاف",
+                label = s("تشغيل الكشاف", "Flashlight"),
                 onClick = { viewModel.executeAction(ActionType.TOGGLE_FLASHLIGHT) }
             )
             QuickPhoneActionButton(
-                icon = Icons.Default.Wifi,
-                label = "إعدادات Wi-Fi",
-                onClick = { viewModel.executeAction(ActionType.OPEN_WIFI_SETTINGS) }
-            )
-            QuickPhoneActionButton(
                 icon = Icons.Default.CameraAlt,
-                label = "فتح الكاميرا",
-                onClick = { viewModel.executeAction(ActionType.OPEN_APP, "الكاميرا") }
+                label = s("فتح الكاميرا", "Camera"),
+                onClick = { viewModel.executeAction(ActionType.OPEN_CAMERA) }
             )
             QuickPhoneActionButton(
                 icon = Icons.Default.VolumeOff,
-                label = "الوضع الصامت",
+                label = s("الوضع الصامت", "Silent Mode"),
                 onClick = { viewModel.executeAction(ActionType.TOGGLE_SILENT_MODE) }
             )
             QuickPhoneActionButton(
+                icon = Icons.Default.Wifi,
+                label = s("إعدادات Wi-Fi", "Wi-Fi"),
+                onClick = { viewModel.executeAction(ActionType.OPEN_WIFI_SETTINGS) }
+            )
+            QuickPhoneActionButton(
                 icon = Icons.Default.Settings,
-                label = "إعدادات الهاتف",
+                label = s("إعدادات الهاتف", "Settings"),
                 onClick = { viewModel.executeAction(ActionType.OPEN_SETTINGS) }
             )
         }
@@ -348,6 +374,7 @@ fun VoiceAssistantScreen(
             items(conversation, key = { it.id }) { msg ->
                 ConversationBubble(
                     message = msg,
+                    isAr = isAr,
                     onExecuteAgain = { action, payload ->
                         viewModel.executeAction(action, payload)
                     }
@@ -369,7 +396,7 @@ fun VoiceAssistantScreen(
                 onValueChange = { textInput = it },
                 placeholder = {
                     Text(
-                        text = "اكتب أو تحدث مباشرة بدون لمس...",
+                        text = s("اكتب أو تحدث مباشرة بدون لمس...", "Type or speak hands-free..."),
                         style = MaterialTheme.typography.bodySmall,
                         color = PolishTextMuted,
                         fontSize = 12.sp
@@ -480,6 +507,7 @@ fun QuickPhoneActionButton(
 @Composable
 fun ConversationBubble(
     message: ConversationMessage,
+    isAr: Boolean,
     onExecuteAgain: (ActionType, String?) -> Unit
 ) {
     val isUser = message.isUser
@@ -510,7 +538,7 @@ fun ConversationBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isUser) "أنت (صوت المالك)" else "التحكم الذاتي",
+                        text = if (isUser) (if (isAr) "أنت (صوت المالك)" else "You (Owner Voice)") else (if (isAr) "التحكم الذاتي" else "Autonomous Agent"),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (isUser) PolishOnPrimaryContainer else PolishPrimary,
@@ -522,7 +550,7 @@ fun ConversationBubble(
                             color = Color(0xFF10B981).copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = "بصمة موثقة (${message.biometricConfidence}%) ✓",
+                                text = if (isAr) "بصمة موثقة (${message.biometricConfidence}%) ✓" else "Voiceprint verified (${message.biometricConfidence}%) ✓",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF10B981),
@@ -558,10 +586,10 @@ fun ConversationBubble(
                                         .size(6.dp)
                                         .clip(CircleShape)
                                         .background(PolishSuccess)
-                                )
+                                    )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "تم تنفيذ الإجراء في الهاتف: ${message.actionType.name}",
+                                    text = if (isAr) "تم تنفيذ الإجراء: ${message.actionType.name}" else "Action executed: ${message.actionType.name}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = PolishSuccess,
                                     fontWeight = FontWeight.SemiBold,
@@ -578,7 +606,7 @@ fun ConversationBubble(
                                 ),
                                 modifier = Modifier.height(26.dp)
                             ) {
-                                Text("إعادة", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text(if (isAr) "إعادة" else "Retry", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

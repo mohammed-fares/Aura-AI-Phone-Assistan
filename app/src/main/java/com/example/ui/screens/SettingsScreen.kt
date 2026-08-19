@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -77,6 +78,7 @@ import com.example.ui.theme.PolishSurfaceElevated
 import com.example.ui.theme.PolishTextMuted
 import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
+import com.example.util.LocalizationManager
 
 @Composable
 fun SettingsScreen(
@@ -86,6 +88,10 @@ fun SettingsScreen(
     val config by viewModel.assistantConfig.collectAsStateWithLifecycle()
     val isEnrolling by viewModel.isEnrollingVoiceprint.collectAsStateWithLifecycle()
     val enrollmentStep by viewModel.enrollmentStep.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+    fun s(ar: String, en: String): String = if (isAr) ar else en
 
     var assistantNameInput by remember(config.assistantName) { mutableStateOf(config.assistantName) }
     var selectedDialect by remember(config.preferredDialect) { mutableStateOf(config.preferredDialect) }
@@ -114,10 +120,14 @@ fun SettingsScreen(
         "English (US / UK)"
     )
 
-    val enrollmentPhrases = listOf(
+    val enrollmentPhrases = if (isAr) listOf(
         "أنا المالك المعتمد لهذا الهاتف والمتحكم به",
         "تفعيل التحكم الذاتي وتنفيذ كافة الأوامر بدون لمس",
         "حماية الهاتف وتدقيق الأمان ومراقبة الشبكة المحلية"
+    ) else listOf(
+        "I am the authorized owner of this phone",
+        "Activate autonomous hands-free phone control",
+        "System security verified and protected"
     )
 
     LazyColumn(
@@ -130,7 +140,79 @@ fun SettingsScreen(
         item {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 1. Biometric Voiceprint Enrollment Card (Crucial for User Voiceprint intent)
+            // 0. Language Selector (Arabic / English / System)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("language_settings_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, PolishSurfaceBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(PolishPrimaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = PolishPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = s("لغة التطبيق والنظام", "App & System Language"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("يتم اختيار لغة النظام تلقائياً عند فتح التطبيق مع إمكانية التغيير", "Automatically uses system language by default"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        LanguageOptionButton(
+                            title = s("تلقائي (النظام)", "System Default"),
+                            isSelected = appLang == "system",
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.setAppLanguage("system") }
+                        )
+                        LanguageOptionButton(
+                            title = "العربية",
+                            isSelected = appLang == "ar",
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.setAppLanguage("ar") }
+                        )
+                        LanguageOptionButton(
+                            title = "English",
+                            isSelected = appLang == "en",
+                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.setAppLanguage("en") }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1. Biometric Voiceprint Enrollment Card
+        item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -161,13 +243,17 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "بصمة صوت المستخدم (Biometric Voiceprint)",
+                                text = s("بصمة الصوت البيومترية للمالك", "Owner Biometric Voiceprint"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = if (config.voiceprintEnrolled) "بصمة صوت المالك مسجلة بنجاح ✓" else "لم يتم تسجيل بصمة صوت المالك بعد",
+                                text = if (config.voiceprintEnrolled) {
+                                    s("البصمة مسجلة ومفعلة ✓ (التحكم مقتصر على صوتك فقط)", "Enrolled & Active ✓ (Actions locked to your voice)")
+                                } else {
+                                    s("غير مسجلة (التطبيق ينفذ الأوامر لأي صوت)", "Not enrolled (Open voice control)")
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (config.voiceprintEnrolled) Color(0xFF10B981) else PolishTextSecondary,
                                 fontSize = 11.sp
@@ -177,67 +263,32 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    Text(
-                        text = "يتم حفظ بصمة صوتك وتحليل الترددات الحيوية لضمان عدم تنفيذ الأوامر التنفيذية والتحكم بالهاتف إلا من خلال صوت المالك الحقيقي حصراً.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = PolishTextSecondary,
-                        fontSize = 12.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "حظر الأوامر الصوتية لغير المالك",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = PolishTextPrimary
-                        )
-                        Switch(
-                            checked = biometricVoiceprintEnabled,
-                            onCheckedChange = {
-                                biometricVoiceprintEnabled = it
-                                viewModel.updateAssistantConfig(config.copy(biometricVoiceprintEnabled = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedTrackColor = PolishSurfaceBorder
-                            ),
-                            modifier = Modifier.testTag("switch_biometric_strict")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
                     if (!isEnrolling) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
                                 onClick = { viewModel.startVoiceprintEnrollment() },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(44.dp)
-                                    .testTag("btn_start_voiceprint_enroll"),
+                                    .testTag("btn_enroll_voiceprint"),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Mic,
                                     contentDescription = null,
+                                    tint = Color.White,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (config.voiceprintEnrolled) "إعادة تسجيل بصمة الصوت" else "تسجيل بصمة صوت جديدة",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = if (config.voiceprintEnrolled) s("إعادة تسجيل البصمة", "Re-enroll Voiceprint") else s("تسجيل بصمة صوت جديدة", "Enroll Voiceprint"),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
                                 )
                             }
 
@@ -245,7 +296,6 @@ fun SettingsScreen(
                                 OutlinedButton(
                                     onClick = { viewModel.resetVoiceprintProfile() },
                                     shape = RoundedCornerShape(14.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
                                     modifier = Modifier.height(44.dp)
                                 ) {
                                     Icon(
@@ -258,7 +308,6 @@ fun SettingsScreen(
                             }
                         }
                     } else {
-                        // Active 3-step enrollment wizard
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = PolishSurface,
@@ -271,14 +320,14 @@ fun SettingsScreen(
                                     .padding(14.dp)
                             ) {
                                 Text(
-                                    text = "خطوة تسجيل البصمة (${enrollmentStep + 1} من 3)",
+                                    text = s("خطوة تسجيل البصمة (${enrollmentStep + 1} من 3)", "Enrollment Step (${enrollmentStep + 1} of 3)"),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PolishPrimary
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "انقر على زر التسجيل وتحدث بالعبارة التالية بوضوح:",
+                                    text = s("انقر على زر التسجيل وتحدث بالعبارة التالية بوضوح:", "Tap record and speak the phrase clearly:"),
                                     fontSize = 11.sp,
                                     color = PolishTextSecondary
                                 )
@@ -312,14 +361,14 @@ fun SettingsScreen(
                                     ) {
                                         Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("تسجيل العينة ${enrollmentStep + 1}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        Text(s("تسجيل العينة ${enrollmentStep + 1}", "Record Sample ${enrollmentStep + 1}"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     }
                                     OutlinedButton(
                                         onClick = { viewModel.cancelVoiceprintEnrollment() },
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier.height(42.dp)
                                     ) {
-                                        Text("إلغاء", fontSize = 12.sp)
+                                        Text(s("إلغاء", "Cancel"), fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -329,7 +378,7 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Control Mode & Behavior (Addressing: Silent execution & always-on listening)
+        // 2. Control Mode & Behavior
         item {
             Card(
                 modifier = Modifier
@@ -341,7 +390,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "نمط التحكم الذاتي وتفويض الأوامر",
+                        text = s("نمط التحكم الذاتي وتفويض الأوامر", "Autonomous Executive Controls"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PolishTextPrimary
@@ -357,13 +406,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "الاستماع الدائم التلقائي فور فتح التطبيق",
+                                text = s("الاستماع الدائم التلقائي فور فتح التطبيق", "Hands-Free Auto-Listening on Open"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = "الهاتف يعمل ضمن الأوامر الصوتية مباشرة بدون الحاجة للضغط على أي أيقونة",
+                                text = s("الهاتف يستمع وينفذ الأوامر مباشرة دون لمس أي زر", "Listens and executes commands immediately without touching"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishTextSecondary,
                                 fontSize = 11.sp
@@ -386,7 +435,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Persistent Background Foreground Service (When Screen is off or App is Closed)
+                    // Persistent Background Foreground Service
                     val isBackgroundRunning by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
                     val context = androidx.compose.ui.platform.LocalContext.current
                     Row(
@@ -396,13 +445,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "تشغيل المساعد كخدمة دائمة في الخلفية (Foreground Service)",
+                                text = s("تشغيل المساعد كخدمة دائمة في الخلفية (Foreground Service)", "Run in Background (Foreground Service)"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = "الاستماع وتنفيذ الأوامر حتى لو كان التطبيق مغلقاً أو الشاشة مقفلة",
+                                text = s("الاستماع وتنفيذ الأوامر حتى لو كان التطبيق مغلقاً أو الشاشة مقفلة", "Executes commands even when app is closed or screen is off"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isBackgroundRunning) Color(0xFF10B981) else PolishTextSecondary,
                                 fontSize = 11.sp
@@ -424,7 +473,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Silent Execution (Disable speech) - Explicit user preference
+                    // Silent Execution (Disable speech)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -432,13 +481,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "الرد الصوتي الناطق (TTS Voice)",
+                                text = s("الرد الصوتي الناطق (TTS Voice)", "Voice Speech Feedback (TTS)"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = if (!voiceFeedback) "التنفيذ صامت بالنيابة عنك (موصى به)" else "المساعد يتحدث صوتياً",
+                                text = if (!voiceFeedback) s("التنفيذ صامت بالنيابة عنك (موصى به)", "Silent execution (Recommended)") else s("المساعد يتحدث صوتياً", "Assistant speaks response aloud"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (!voiceFeedback) Color(0xFF10B981) else PolishTextSecondary,
                                 fontSize = 11.sp
@@ -469,13 +518,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "مراقبة الشبكة المحلية ومشاركات الشاشة",
+                                text = s("مراقبة الشبكة المحلية ومشاركات الشاشة", "Local LAN & Screen Stream Audit"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = PolishTextPrimary
                             )
                             Text(
-                                text = "أرشفة كافة البيانات والمشاركات والأجهزة المتصلة على نفس شبكة Wi-Fi",
+                                text = s("أرشفة كافة البيانات والمشاركات والأجهزة المتصلة على نفس شبكة Wi-Fi", "Monitor connected LAN nodes, media streams, and screen shares"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishTextSecondary,
                                 fontSize = 11.sp
@@ -511,7 +560,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "تخصيص هوية المساعد واللهجة",
+                        text = s("تخصيص هوية المساعد واللهجة", "Assistant Persona & Identity"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PolishTextPrimary
@@ -520,7 +569,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "اسم المساعد (نداء التنبيه):",
+                        text = s("اسم المساعد (نداء التنبيه):", "Assistant Name:"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishTextSecondary,
                         fontSize = 12.sp
@@ -547,7 +596,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "اللهجة واللغة المفضلة:",
+                        text = s("اللهجة واللغة المفضلة:", "Preferred Dialect:"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishTextSecondary,
                         fontSize = 12.sp
@@ -578,7 +627,7 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
-                                    text = "تغيير ▼",
+                                    text = s("تغيير ▼", "Change ▼"),
                                     color = PolishPrimary,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold
@@ -644,7 +693,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "حفظ إعدادات الهوية والتحكم",
+                            text = s("حفظ إعدادات الهوية والتحكم", "Save Assistant Configuration"),
                             color = Color.White,
                             fontWeight = FontWeight.Bold
                         )
@@ -653,130 +702,33 @@ fun SettingsScreen(
             }
         }
 
-        // 4. Add Custom Voice Shortcut Section
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("create_shortcut_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
-                border = BorderStroke(1.dp, PolishSurfaceBorder)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "إنشاء اختصار تحكم صوتي مخصص",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = PolishTextPrimary
-                        )
-                        Button(
-                            onClick = { showAddShortcut = !showAddShortcut },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 12.dp,
-                                vertical = 6.dp
-                            ),
-                            modifier = Modifier.testTag("toggle_add_shortcut_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (showAddShortcut) "إغلاق" else "إضافة",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    if (showAddShortcut) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        OutlinedTextField(
-                            value = newShortcutTitle,
-                            onValueChange = { newShortcutTitle = it },
-                            label = { Text("اسم الاختصار (مثال: تشغيل الكشاف)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("input_shortcut_title"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = PolishSurface,
-                                unfocusedContainerColor = PolishSurface,
-                                focusedBorderColor = PolishPrimary,
-                                unfocusedBorderColor = PolishSurfaceBorder,
-                                focusedTextColor = PolishTextPrimary,
-                                unfocusedTextColor = PolishTextPrimary
-                            ),
-                            singleLine = true
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = newShortcutPhrase,
-                            onValueChange = { newShortcutPhrase = it },
-                            label = { Text("العبارة الصوتية للتشغيل (مثال: شغل الضوء يا نور)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("input_shortcut_phrase"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = PolishSurface,
-                                unfocusedContainerColor = PolishSurface,
-                                focusedBorderColor = PolishPrimary,
-                                unfocusedBorderColor = PolishSurfaceBorder,
-                                focusedTextColor = PolishTextPrimary,
-                                unfocusedTextColor = PolishTextPrimary
-                            ),
-                            singleLine = true
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = {
-                                if (newShortcutTitle.isNotBlank() && newShortcutPhrase.isNotBlank()) {
-                                    viewModel.addCustomShortcut(
-                                        title = newShortcutTitle,
-                                        triggerPhrase = newShortcutPhrase,
-                                        actionType = ActionType.TOGGLE_FLASHLIGHT,
-                                        payload = ""
-                                    )
-                                    newShortcutTitle = ""
-                                    newShortcutPhrase = ""
-                                    showAddShortcut = false
-                                }
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                                .testTag("submit_custom_shortcut_btn")
-                        ) {
-                            Text(
-                                text = "حفظ الاختصار في الذكاء الاصطناعي",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
         item {
             Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun LanguageOptionButton(
+    title: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) PolishPrimary.copy(alpha = 0.2f) else PolishSurface,
+        border = BorderStroke(1.dp, if (isSelected) PolishPrimary else PolishSurfaceBorder),
+        modifier = modifier.height(44.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = title,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) PolishPrimary else PolishTextSecondary
+            )
         }
     }
 }

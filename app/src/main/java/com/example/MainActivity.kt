@@ -68,14 +68,15 @@ import com.example.ui.theme.PolishSecondaryContainer
 import com.example.ui.theme.PolishSurface
 import com.example.ui.theme.PolishSurfaceBorder
 import com.example.ui.theme.PolishTextSecondary
+import com.example.util.LocalizationManager
 import kotlin.math.sqrt
 
-enum class AppTab(val title: String, val testTag: String) {
-    VOICE("التحكم الصوتي", "tab_voice"),
-    SECURITY("فحص الأمان", "tab_security"),
-    DASHBOARD("المراقبة و LAN", "tab_dashboard"),
-    ARCHIVE("سجل الأرشفة", "tab_archive"),
-    SETTINGS("بصمة الصوت", "tab_settings")
+enum class AppTab(val titleAr: String, val titleEn: String, val testTag: String) {
+    VOICE("التحكم الصوتي", "Voice", "tab_voice"),
+    SECURITY("فحص الأمان", "Security", "tab_security"),
+    DASHBOARD("المراقبة و LAN", "Dashboard", "tab_dashboard"),
+    ARCHIVE("سجل الأرشفة", "Archive", "tab_archive"),
+    SETTINGS("الإعدادات", "Settings", "tab_settings")
 }
 
 class MainActivity : ComponentActivity(), SensorEventListener {
@@ -114,8 +115,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         setContent {
+            val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+            val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+            val layoutDir = if (isAr) LayoutDirection.Rtl else LayoutDirection.Ltr
+
             MyApplicationTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
                     MainAppLayout(
                         viewModel = viewModel,
                         onRequestAllPermissions = { requestAllPermissions() }
@@ -186,6 +191,8 @@ fun MainAppLayout(
     var selectedTab by remember { mutableStateOf(AppTab.VOICE) }
     val snackbarHostState = remember { SnackbarHostState() }
     val systemNotice by viewModel.systemStatusNotice.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
 
     LaunchedEffect(systemNotice) {
         systemNotice?.let { msg ->
@@ -212,6 +219,8 @@ fun MainAppLayout(
                 ) {
                     AppTab.values().forEach { tab ->
                         val isSelected = selectedTab == tab
+                        val tabTitle = if (isAr) tab.titleAr else tab.titleEn
+
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = { selectedTab = tab },
@@ -224,13 +233,13 @@ fun MainAppLayout(
                                         AppTab.ARCHIVE -> Icons.Default.Storage
                                         AppTab.SETTINGS -> Icons.Default.Settings
                                     },
-                                    contentDescription = tab.title,
+                                    contentDescription = tabTitle,
                                     modifier = Modifier.size(22.dp)
                                 )
                             },
                             label = {
                                 Text(
-                                    text = tab.title,
+                                    text = tabTitle,
                                     fontSize = 10.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )

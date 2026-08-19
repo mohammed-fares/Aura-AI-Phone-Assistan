@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
@@ -45,25 +44,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.entity.ActionType
 import com.example.data.local.entity.TelemetryType
 import com.example.ui.MainViewModel
 import com.example.ui.components.InsightCard
 import com.example.ui.components.TelemetryLogItemCard
 import com.example.ui.theme.PolishBackground
-import com.example.ui.theme.PolishGlow
-import com.example.ui.theme.PolishOnPrimaryContainer
 import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishPrimaryContainer
-import com.example.ui.theme.PolishSecondary
 import com.example.ui.theme.PolishSecondaryContainer
-import com.example.ui.theme.PolishSuccess
-import com.example.ui.theme.PolishSuccessContainer
-import com.example.ui.theme.PolishSurface
 import com.example.ui.theme.PolishSurfaceBorder
 import com.example.ui.theme.PolishSurfaceElevated
 import com.example.ui.theme.PolishTextMuted
 import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
+import com.example.util.LocalizationManager
 
 @Composable
 fun ActivityArchiveScreen(
@@ -74,17 +69,21 @@ fun ActivityArchiveScreen(
     val insights by viewModel.insights.collectAsStateWithLifecycle()
     val selectedFilter by viewModel.selectedLogFilter.collectAsStateWithLifecycle()
     val isAuditing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+    fun s(ar: String, en: String): String = if (isAr) ar else en
 
     val filteredLogs = if (selectedFilter == null) logs else logs.filter { it.type == selectedFilter }
 
     val filterOptions = listOf(
-        Pair("الكل", null),
-        Pair("الأوامر الصوتية", TelemetryType.VOICE_COMMAND),
-        Pair("الشبكة والاتصالات", TelemetryType.NETWORK_TRAFFIC),
-        Pair("البطارية والطاقة", TelemetryType.BATTERY_POWER),
-        Pair("الأداء والذاكرة", TelemetryType.SYSTEM_PERFORMANCE),
-        Pair("تدقيق الذكاء الاصطناعي", TelemetryType.AI_INFERENCE),
-        Pair("حركات اللمس", TelemetryType.TOUCH_GESTURE)
+        Pair(s("الكل", "All"), null),
+        Pair(s("الأوامر الصوتية", "Voice"), TelemetryType.VOICE_COMMAND),
+        Pair(s("الشبكة والاتصالات", "Network"), TelemetryType.NETWORK_TRAFFIC),
+        Pair(s("البطارية والطاقة", "Battery"), TelemetryType.BATTERY_POWER),
+        Pair(s("الأداء والذاكرة", "System"), TelemetryType.SYSTEM_PERFORMANCE),
+        Pair(s("تدقيق الذكاء الاصطناعي", "AI Audit"), TelemetryType.AI_INFERENCE),
+        Pair(s("حركات اللمس", "Touch"), TelemetryType.TOUCH_GESTURE)
     )
 
     LazyColumn(
@@ -130,13 +129,13 @@ fun ActivityArchiveScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "قاعدة بيانات وتدقيق الهاتف",
+                                    text = s("قاعدة بيانات وتدقيق الهاتف", "System Audit & Archive"),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PolishTextPrimary
                                 )
                                 Text(
-                                    text = "أرشفة وتحليل المدخلات وسلوكيات الاستخدام",
+                                    text = s("أرشفة وتحليل المدخلات وسلوكيات الاستخدام", "Archive and analysis of system inputs"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = PolishTextSecondary,
                                     fontSize = 11.sp
@@ -159,7 +158,7 @@ fun ActivityArchiveScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isAuditing) "جاري التدقيق..." else "تدقيق AI",
+                                text = if (isAuditing) s("جاري التدقيق...", "Auditing...") else s("تدقيق AI", "AI Audit"),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
@@ -188,7 +187,7 @@ fun ActivityArchiveScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "حماية موارد الهاتف: يتم تدقيق البيانات فور تدفقها وتطهير السجلات القديمة تلقائياً دون استهلاك الذاكرة أو طاقة المعالج.",
+                                text = s("حماية موارد الهاتف: يتم تدقيق البيانات فور تدفقها وتطهير السجلات القديمة تلقائياً دون استهلاك الذاكرة أو طاقة المعالج.", "Resource Guard: Telemetry streams are processed in real-time with zero overhead."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishTextPrimary,
                                 fontSize = 11.sp
@@ -208,13 +207,13 @@ fun ActivityArchiveScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "رؤى الذكاء الاصطناعي وأنماط السلوك",
+                        text = s("رؤى الذكاء الاصطناعي وأنماط السلوك", "AI Behavioral Insights"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PolishTextPrimary
                     )
                     Text(
-                        text = "${insights.size} تحليلات مكتشفة",
+                        text = "${insights.size} " + s("تحليلات مكتشفة", "insights found"),
                         style = MaterialTheme.typography.labelSmall,
                         color = PolishTextMuted
                     )
@@ -224,7 +223,7 @@ fun ActivityArchiveScreen(
             items(insights, key = { it.id }) { insight ->
                 InsightCard(
                     insight = insight,
-                    onApply = { viewModel.executeAction(com.example.data.local.entity.ActionType.BATTERY_OPTIMIZATION) }
+                    onApply = { viewModel.executeAction(ActionType.BATTERY_OPTIMIZATION) }
                 )
             }
         }
@@ -238,7 +237,7 @@ fun ActivityArchiveScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "سجل أحداث ومدخلات الهاتف (${filteredLogs.size})",
+                        text = s("سجل أحداث ومدخلات الهاتف", "System Event Stream") + " (${filteredLogs.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PolishTextPrimary
@@ -300,7 +299,7 @@ fun ActivityArchiveScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "لا توجد سجلات مطابقة لهذا الفلتر",
+                            text = s("لا توجد سجلات مطابقة لهذا الفلتر", "No logs matching current filter"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = PolishTextMuted
                         )
@@ -318,4 +317,3 @@ fun ActivityArchiveScreen(
         }
     }
 }
-

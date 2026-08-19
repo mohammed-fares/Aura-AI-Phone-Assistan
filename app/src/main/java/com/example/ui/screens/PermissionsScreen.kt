@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,19 +45,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.MainViewModel
 import com.example.ui.components.PermissionRowCard
 import com.example.ui.theme.PolishBackground
-import com.example.ui.theme.PolishGlow
 import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishPrimaryContainer
-import com.example.ui.theme.PolishSecondary
 import com.example.ui.theme.PolishSecondaryContainer
 import com.example.ui.theme.PolishSuccess
 import com.example.ui.theme.PolishSuccessContainer
-import com.example.ui.theme.PolishSurface
 import com.example.ui.theme.PolishSurfaceBorder
 import com.example.ui.theme.PolishSurfaceElevated
-import com.example.ui.theme.PolishTextMuted
 import com.example.ui.theme.PolishTextPrimary
 import com.example.ui.theme.PolishTextSecondary
+import com.example.util.LocalizationManager
 
 @Composable
 fun PermissionsScreen(
@@ -67,6 +63,11 @@ fun PermissionsScreen(
     modifier: Modifier = Modifier
 ) {
     val permissions by viewModel.permissionsState.collectAsStateWithLifecycle()
+    val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+
+    val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
+    fun s(ar: String, en: String): String = if (isAr) ar else en
+
     val grantedCount = permissions.count { it.isGranted }
     val totalCount = permissions.size.coerceAtLeast(1)
     val progress = grantedCount.toFloat() / totalCount
@@ -120,13 +121,13 @@ fun PermissionsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "مركز صلاحيات وأذونات الهاتف",
+                                    text = s("مركز صلاحيات وأذونات الهاتف", "Permissions & Access Center"),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PolishTextPrimary
                                 )
                                 Text(
-                                    text = "تمكين الوصول لكافة وظائف الهاتف ذاتياً",
+                                    text = s("تمكين الوصول لكافة وظائف الهاتف ذاتياً", "Enable access to phone functions"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = PolishTextSecondary,
                                     fontSize = 11.sp
@@ -140,7 +141,7 @@ fun PermissionsScreen(
                             border = BorderStroke(1.dp, if (grantedCount == totalCount) PolishSuccess else PolishSurfaceBorder)
                         ) {
                             Text(
-                                text = "$grantedCount من $totalCount نشطة",
+                                text = "$grantedCount " + s("من", "of") + " $totalCount " + s("نشطة", "granted"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (grantedCount == totalCount) PolishSuccess else PolishPrimary,
                                 fontWeight = FontWeight.Bold,
@@ -180,7 +181,7 @@ fun PermissionsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (grantedCount == totalCount) "كافة الأذونات ممنوحة وجاهزة" else "منح وتفعيل كافة الصلاحيات الآن",
+                            text = if (grantedCount == totalCount) s("كافة الأذونات ممنوحة وجاهزة", "All Permissions Granted ✓") else s("منح وتفعيل كافة الصلاحيات الآن", "Grant All Permissions Now"),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
@@ -192,7 +193,7 @@ fun PermissionsScreen(
 
         item {
             Text(
-                text = "قائمة الصلاحيات والوصول للنظام",
+                text = s("قائمة الصلاحيات والوصول للنظام", "System Permissions & Access"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = PolishTextPrimary
@@ -215,14 +216,14 @@ fun PermissionsScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "🔒 الخصوصية والأمان الفائق",
+                        text = "🔒 " + s("الخصوصية والأمان الفائق", "Privacy & Local Processing"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = PolishPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "تطبيق المساعد لا يقوم ببيع بياناتك، ويتم تدقيق وأرشفة الأحداث محلياً لحماية خصوصيتك مع تشفير تام أثناء التواصل مع الداشبورد أو السيرفر.",
+                        text = s("تطبيق المساعد لا يقوم ببيع بياناتك، ويتم تدقيق وأرشفة الأحداث محلياً لحماية خصوصيتك مع تشفير تام للاتصالات.", "The assistant processes data locally on-device and respects your privacy."),
                         style = MaterialTheme.typography.bodySmall,
                         color = PolishTextSecondary,
                         fontSize = 11.sp
@@ -236,4 +237,3 @@ fun PermissionsScreen(
         }
     }
 }
-

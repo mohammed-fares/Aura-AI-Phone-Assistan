@@ -7,9 +7,10 @@ import androidx.room.PrimaryKey
 data class AssistantConfigEntity(
     @PrimaryKey
     val id: Int = 1,
-    val assistantName: String = "نور", // Customizable AI companion name
-    val userDisplayName: String = "المستخدم المصرح له",
-    val preferredDialect: String = "العربية (جميع اللهجات)",
+    val assistantName: String = "AURA",
+    val userDisplayName: String = "User",
+    val appLanguage: String = "system", // "system", "ar", "en"
+    val preferredDialect: String = "العربية / English (Auto)",
     val autoListeningSensitivity: Float = 0.85f,
     val ttsPitch: Float = 1.0f,
     val ttsSpeed: Float = 1.0f,
@@ -25,5 +26,6 @@ data class AssistantConfigEntity(
     val backgroundTelemetryEnabled: Boolean = true,
     val backgroundServiceEnabled: Boolean = true,
     val shakeGestureActionEnabled: Boolean = true,
+    val speechEngineMode: String = "auto", // "auto", "system", "embedded"
     val lastAuditTimestamp: Long = System.currentTimeMillis()
 )
