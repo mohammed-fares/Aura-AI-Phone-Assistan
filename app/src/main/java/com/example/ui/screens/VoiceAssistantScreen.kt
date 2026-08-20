@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -116,6 +117,7 @@ enum class ActionCategory(val titleAr: String, val titleEn: String) {
 @Composable
 fun VoiceAssistantScreen(
     viewModel: MainViewModel,
+    onRequestPermissions: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -285,6 +287,34 @@ fun VoiceAssistantScreen(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isListening) Color(0xFF10B981) else PolishTextSecondary
+                            )
+                        }
+                    }
+
+                    // Permissions & Access Center Pill
+                    Surface(
+                        onClick = { onRequestPermissions() },
+                        shape = RoundedCornerShape(16.dp),
+                        color = PolishPrimaryContainer.copy(alpha = 0.25f),
+                        border = BorderStroke(1.dp, PolishPrimary.copy(alpha = 0.5f)),
+                        modifier = Modifier.testTag("pill_grant_permissions_shortcut")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = PolishPrimary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = s("صلاحيات الهاتف 🛡️", "Permissions 🛡️"),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishPrimary
                             )
                         }
                     }

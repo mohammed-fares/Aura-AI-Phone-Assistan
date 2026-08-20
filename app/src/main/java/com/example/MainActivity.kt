@@ -88,8 +88,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private val requiredPermissions = buildList {
         add(Manifest.permission.RECORD_AUDIO)
-        add(Manifest.permission.READ_PHONE_STATE)
+        add(Manifest.permission.CALL_PHONE)
+        add(Manifest.permission.SEND_SMS)
         add(Manifest.permission.READ_CONTACTS)
+        add(Manifest.permission.CAMERA)
+        add(Manifest.permission.READ_PHONE_STATE)
+        add(Manifest.permission.READ_CALL_LOG)
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -264,7 +268,10 @@ fun MainAppLayout(
                 .padding(innerPadding)
         ) {
             when (selectedTab) {
-                AppTab.VOICE -> VoiceAssistantScreen(viewModel = viewModel)
+                AppTab.VOICE -> VoiceAssistantScreen(
+                    viewModel = viewModel,
+                    onRequestPermissions = onRequestAllPermissions
+                )
                 AppTab.SECURITY -> SecurityScanScreen(viewModel = viewModel)
                 AppTab.DASHBOARD -> DashboardScreen(viewModel = viewModel)
                 AppTab.ARCHIVE -> ActivityArchiveScreen(viewModel = viewModel)
