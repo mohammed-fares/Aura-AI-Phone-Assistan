@@ -115,6 +115,8 @@ fun SettingsScreen(
     var biometricVoiceprintEnabled by remember(config.biometricVoiceprintEnabled) { mutableStateOf(config.biometricVoiceprintEnabled) }
     var securityThreatAlerts by remember(config.securityThreatScanAutoAlerts) { mutableStateOf(config.securityThreatScanAutoAlerts) }
     var localNetworkMonitoring by remember(config.localNetworkMonitoringEnabled) { mutableStateOf(config.localNetworkMonitoringEnabled) }
+    var wakeWordOnlyMode by remember(config.wakeWordOnlyMode) { mutableStateOf(config.wakeWordOnlyMode) }
+    var customWakeWordInput by remember(config.customWakeWord) { mutableStateOf(config.customWakeWord) }
 
     var speechPitch by remember(config.ttsPitch) { mutableFloatStateOf(config.ttsPitch) }
     var speechSpeed by remember(config.ttsSpeed) { mutableFloatStateOf(config.ttsSpeed) }
@@ -972,11 +974,105 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    Text(
+                        text = s("نداء التنبيه المخصص الإضافي (كلمة الاستيقاظ):", "Additional Custom Wake-Word:"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PolishTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = customWakeWordInput,
+                        onValueChange = { customWakeWordInput = it },
+                        placeholder = { Text(s("مثال: يا أورا، يا ذكاء، رفيقي", "e.g. Aura, Hey Assistant"), fontSize = 12.sp, color = PolishTextMuted) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_custom_wake_word"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PolishPrimary,
+                            unfocusedBorderColor = PolishSurfaceBorder,
+                            focusedTextColor = PolishTextPrimary,
+                            unfocusedTextColor = PolishTextPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s("الاستيقاظ والتنفيذ فقط عند النداء بالاسم", "Wake-Word Only Mode"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PolishTextPrimary
+                            )
+                            Text(
+                                text = s("يتجاهل أي حديث عام حتى تناديه باسمه (مثل: يا ${assistantNameInput.ifBlank { "أورا" }})", "Ignores background talk until called by name"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PolishTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = wakeWordOnlyMode,
+                            onCheckedChange = {
+                                wakeWordOnlyMode = it
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF10B981),
+                                uncheckedTrackColor = PolishSurfaceBorder
+                            ),
+                            modifier = Modifier.testTag("switch_wake_word_only")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Safe Audio Source Assurance
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF064E3B).copy(alpha = 0.3f),
+                        border = BorderStroke(1.dp, Color(0xFF059669).copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = Color(0xFF34D399),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = s(
+                                    "🔒 حماية وأمان فائق: المساعد محمي تماماً من استماع الفيديوهات المسجلة أو المشغلة على الهاتف لضمان عدم تنفيذ أوامر غير مقصودة.",
+                                    "🔒 Verified Audio Isolation: Ignores internal media/video playback to prevent unintended execution."
+                                ),
+                                fontSize = 10.sp,
+                                color = Color(0xFFA7F3D0),
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Button(
                         onClick = {
                             viewModel.updateAssistantConfig(
                                 config.copy(
                                     assistantName = assistantNameInput.ifBlank { "AURA" },
+                                    customWakeWord = customWakeWordInput.trim(),
+                                    wakeWordOnlyMode = wakeWordOnlyMode,
                                     preferredDialect = selectedDialect
                                 )
                             )

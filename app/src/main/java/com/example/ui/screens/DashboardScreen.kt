@@ -27,9 +27,11 @@ import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Search
@@ -197,6 +199,139 @@ fun DashboardScreen(
                                 text = s("تحكم كامل: مكالمات، رسائل، ايميلات، تطبيقات، أمان بدون لمس", "Full Phone Access: Calls, SMS, Emails, Apps, Security hands-free"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Wake Word Trigger & Call-By-Name Intelligence Card (NEW USER REQUIREMENT)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("wake_word_call_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = PolishSurfaceElevated),
+                border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Hearing,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = s("الاستيقاظ الفوري بالنداء على المساعد", "Instant Wake-Word & Call-by-Name"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PolishTextPrimary
+                                )
+                                Text(
+                                    text = s("ينفذ الأوامر مباشرة دون لمس الهاتف أو فتحه", "Executes commands hands-free without opening app"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = PolishTextSecondary
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (config.wakeWordOnlyMode) PolishPrimaryContainer else Color(0xFF10B981).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = if (config.wakeWordOnlyMode) s("وضع النداء", "Wake-Word Mode") else s("استماع مباشر", "Always Direct"),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (config.wakeWordOnlyMode) PolishPrimary else Color(0xFF10B981)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = PolishBackground,
+                        border = BorderStroke(1.dp, PolishSurfaceBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = s("💬 نداء التنبيه:", "💬 Call Phrase:"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PolishTextSecondary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "«يا ${config.assistantName}» / «${config.customWakeWord}»",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF10B981)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = s(
+                                    "مثال: «يا أورا افتح الواتساب واكتب رسالة لمحمد مرحبا» أو «يا أورا اتصل بأبي»",
+                                    "e.g. \"Hey Aura send message to Mom hello\" or \"Aura call Dad\""
+                                ),
+                                fontSize = 11.sp,
+                                color = PolishTextMuted
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Security & Hardware Trust Shield Bar
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, Color(0xFF334155)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = s(
+                                    "🛡️ أمان وثقة: عزل أصوات الفيديوهات المشغلة على الهاتف | استماع خارجي نقي | مهلة كافية لإكمال كلامك",
+                                    "🛡️ Verified Shield: Internal video sound filtered | Clean mic input | Adaptive pause tolerance"
+                                ),
+                                fontSize = 10.sp,
+                                color = Color(0xFF94A3B8),
+                                lineHeight = 14.sp
                             )
                         }
                     }

@@ -640,7 +640,33 @@ class ActionExecutionEngine(private val context: Context) {
 
     private fun launchAppByQuery(query: String): String? {
         val pm = context.packageManager
-        val cleanQuery = query.lowercase().trim()
+        if (query.isBlank()) return null
+
+        // Strip common command prefixes
+        var cleanQuery = query.lowercase().trim()
+        val prefixesToRemove = listOf(
+            "تطبيق ", "برنامج ", "ابلكيشن ", "الابلكيشن ", "البرنامج ", "التطبيق ",
+            "افتح ", "شغل ", "انتقل الى ", "انتقل إلى ", "فتح ", "تشغيل ",
+            "open ", "launch ", "start ", "run ", "app "
+        )
+        for (prefix in prefixesToRemove) {
+            if (cleanQuery.startsWith(prefix)) {
+                cleanQuery = cleanQuery.removePrefix(prefix).trim()
+            }
+        }
+
+        // 1. Direct package name launch if exact package name given
+        try {
+            val directIntent = pm.getLaunchIntentForPackage(cleanQuery)
+            if (directIntent != null) {
+                directIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                context.startActivity(directIntent)
+                val appInfo = pm.getApplicationInfo(cleanQuery, 0)
+                return pm.getApplicationLabel(appInfo).toString()
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
 
         val knownPackages = mapOf(
             "واتساب" to "com.whatsapp",
@@ -657,6 +683,7 @@ class ActionExecutionEngine(private val context: Context) {
             "الكروم" to "com.android.chrome",
             "chrome" to "com.android.chrome",
             "متصفح" to "com.android.chrome",
+            "المتصفح" to "com.android.chrome",
             "browser" to "com.android.chrome",
             "تليجرام" to "org.telegram.messenger",
             "تيليجرام" to "org.telegram.messenger",
@@ -668,6 +695,7 @@ class ActionExecutionEngine(private val context: Context) {
             "الانستقرام" to "com.instagram.android",
             "الانستغرام" to "com.instagram.android",
             "انستا" to "com.instagram.android",
+            "الانستا" to "com.instagram.android",
             "instagram" to "com.instagram.android",
             "فيسبوك" to "com.facebook.katana",
             "الفيسبوك" to "com.facebook.katana",
@@ -691,12 +719,14 @@ class ActionExecutionEngine(private val context: Context) {
             "خرائط" to "com.google.android.apps.maps",
             "الخرائط" to "com.google.android.apps.maps",
             "maps" to "com.google.android.apps.maps",
+            "google maps" to "com.google.android.apps.maps",
             "جيميل" to "com.google.android.gm",
             "الجيميل" to "com.google.android.gm",
             "gmail" to "com.google.android.gm",
             "حاسبة" to "com.google.android.calculator",
             "الحاسبة" to "com.google.android.calculator",
             "آلة حاسبة" to "com.google.android.calculator",
+            "الآلة الحاسبة" to "com.google.android.calculator",
             "calculator" to "com.google.android.calculator",
             "استوديو" to "com.google.android.apps.photos",
             "الاستوديو" to "com.google.android.apps.photos",
@@ -704,10 +734,12 @@ class ActionExecutionEngine(private val context: Context) {
             "المعرض" to "com.google.android.apps.photos",
             "photos" to "com.google.android.apps.photos",
             "صور" to "com.google.android.apps.photos",
+            "الصور" to "com.google.android.apps.photos",
             "متجر" to "com.android.vending",
             "المتجر" to "com.android.vending",
             "بلاي" to "com.android.vending",
             "play" to "com.android.vending",
+            "play store" to "com.android.vending",
             "ساعة" to "com.google.android.deskclock",
             "الساعة" to "com.google.android.deskclock",
             "منبه" to "com.google.android.deskclock",
@@ -718,17 +750,18 @@ class ActionExecutionEngine(private val context: Context) {
             "رسائل" to "com.google.android.apps.messaging",
             "الرسائل" to "com.google.android.apps.messaging",
             "messages" to "com.google.android.apps.messaging",
+            "sms" to "com.google.android.apps.messaging",
             "ماسنجر" to "com.facebook.orca",
             "الماسنجر" to "com.facebook.orca",
             "messenger" to "com.facebook.orca"
         )
 
         for ((key, pkg) in knownPackages) {
-            if (cleanQuery.contains(key) || key.contains(cleanQuery)) {
+            if (cleanQuery == key || cleanQuery.contains(key) || key.contains(cleanQuery)) {
                 try {
                     val intent = pm.getLaunchIntentForPackage(pkg)
                     if (intent != null) {
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                         context.startActivity(intent)
                         return key
                     }
@@ -738,19 +771,44 @@ class ActionExecutionEngine(private val context: Context) {
             }
         }
 
+        // Exhaustive Dynamic Search across all Installed Launcher Apps & Package Registry
         try {
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
             val resolvedApps = pm.queryIntentActivities(mainIntent, 0)
+            
+            // Phase 1: Exact or starts-with match
             for (info in resolvedApps) {
                 val appLabel = info.loadLabel(pm).toString().lowercase()
                 val pkgName = info.activityInfo.packageName.lowercase()
 
-                if (appLabel.contains(cleanQuery) || pkgName.contains(cleanQuery) || cleanQuery.contains(appLabel)) {
+                if (appLabel == cleanQuery || pkgName == cleanQuery) {
                     val launchIntent = pm.getLaunchIntentForPackage(info.activityInfo.packageName)
                     if (launchIntent != null) {
-                        launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        context.startActivity(launchIntent)
+                        return info.loadLabel(pm).toString()
+                    }
+                }
+            }
+
+            // Phase 2: Substring or normalized match (Arabic/English)
+            val normalizedQuery = cleanQuery.replace("ال", "").replace("أ", "ا").replace("إ", "ا").trim()
+            for (info in resolvedApps) {
+                val appLabel = info.loadLabel(pm).toString().lowercase()
+                val normalizedLabel = appLabel.replace("ال", "").replace("أ", "ا").replace("إ", "ا").trim()
+                val pkgName = info.activityInfo.packageName.lowercase()
+
+                if (appLabel.contains(cleanQuery) || 
+                    pkgName.contains(cleanQuery) || 
+                    cleanQuery.contains(appLabel) ||
+                    (normalizedQuery.length >= 3 && normalizedLabel.contains(normalizedQuery)) ||
+                    (normalizedQuery.length >= 3 && pkgName.contains(normalizedQuery))) {
+                    
+                    val launchIntent = pm.getLaunchIntentForPackage(info.activityInfo.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                         context.startActivity(launchIntent)
                         return info.loadLabel(pm).toString()
                     }

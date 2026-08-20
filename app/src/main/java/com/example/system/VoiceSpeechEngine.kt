@@ -7,6 +7,9 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
+import android.media.audiofx.AutomaticGainControl
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -90,6 +93,18 @@ class VoiceSpeechEngine(private val context: Context) {
     }
 
     fun isMuted(): Boolean = isAllSoundsMuted
+
+    /**
+     * Checks if audio is currently playing internally on the phone (video, music, recording).
+     * Used to prevent voice commands originating from phone speaker output.
+     */
+    fun isInternalPlaybackActive(): Boolean {
+        return try {
+            audioManager?.isMusicActive == true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     fun setKeepMicContinuouslyOpen(keepOpen: Boolean) {
         keepMicContinuouslyOpen = keepOpen
@@ -263,6 +278,10 @@ class VoiceSpeechEngine(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                     putExtra("android.speech.extra.DICTATION_MODE", true)
+                    // Generous pauses so slow speakers or thinking pauses are not cut off
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
                 }
 
                 silenceChimesTemporarily()
@@ -344,6 +363,24 @@ class VoiceSpeechEngine(private val context: Context) {
                     _isListening.value = false
                     isAudioRecordRunning.value = false
                     return@launch
+                }
+
+                // Enable hardware acoustic echo cancellation & noise suppression
+                try {
+                    val sessionId = audioRecord?.audioSessionId ?: 0
+                    if (sessionId != 0) {
+                        if (AcousticEchoCanceler.isAvailable()) {
+                            AcousticEchoCanceler.create(sessionId)?.enabled = true
+                        }
+                        if (NoiseSuppressor.isAvailable()) {
+                            NoiseSuppressor.create(sessionId)?.enabled = true
+                        }
+                        if (AutomaticGainControl.isAvailable()) {
+                            AutomaticGainControl.create(sessionId)?.enabled = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    // ignore
                 }
 
                 audioRecord?.startRecording()

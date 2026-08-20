@@ -82,6 +82,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val voiceprintManager = auraApp.voiceprintManager
     val securityScanEngine = auraApp.securityScanEngine
     val localNetworkMonitor = auraApp.localNetworkMonitor
+    val wakeWordManager = auraApp.wakeWordManager
 
     // Background Foreground Service State
     val isBackgroundServiceActive: StateFlow<Boolean> = com.example.service.AssistantForegroundService.isServiceRunning
@@ -397,15 +398,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setWakeWordOnlyMode(enabled: Boolean) {
+        viewModelScope.launch {
+            val cfg = assistantConfig.value
+            repository.updateConfig(cfg.copy(wakeWordOnlyMode = enabled))
+        }
+    }
+
+    fun setCustomWakeWord(word: String) {
+        viewModelScope.launch {
+            val cfg = assistantConfig.value
+            repository.updateConfig(cfg.copy(customWakeWord = word.trim()))
+        }
+    }
+
     fun handleUserVoiceInput(rawInput: String, rmsHistory: List<Float> = emptyList()) {
         if (rawInput.isBlank()) return
         val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
 
         viewModelScope.launch {
+            val config = assistantConfig.value
+
+            // 0. Anti-Spoof: Reject commands originated from internal speaker video/audio playback
+            if (voiceEngine.isInternalPlaybackActive()) {
+                val isInternalWarn = if (isAr) 
+                    "🛡️ تم تجاهل الصوت الملتقط: مصدره وسائط أو فيديو مشغل على نفس الهاتف لحماية أمانك."
+                else "🛡️ Command ignored: Filtered internal audio playback on device."
+                _systemStatusNotice.value = isInternalWarn
+                return@launch
+            }
+
+            // 1. Wake Word Analysis
+            val wakeResult = wakeWordManager.checkWakeWord(
+                rawText = rawInput,
+                configuredAssistantName = config.assistantName,
+                customWakeWord = config.customWakeWord
+            )
+
+            // If wake-word-only mode is active and wake word was not mentioned, ignore ambient chatter
+            if (config.wakeWordOnlyMode && !wakeResult.isWakeWordDetected) {
+                return@launch
+            }
+
+            if (wakeResult.isWakeWordDetected) {
+                actionEngine.vibratePhone(50L)
+            }
+
             _isProcessingAi.value = true
 
-            // 1. Biometric Voiceprint Verification
-            val config = assistantConfig.value
+            // 2. Biometric Voiceprint Verification
             val verification = if (config.biometricVoiceprintEnabled) {
                 voiceprintManager.verifyVoiceprint(
                     spokenText = rawInput,
@@ -452,11 +493,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // 2. Parse command via AI with multi-layer fallback
+            // If user simply called the assistant's name ("يا أورا" / "Aura")
+            if (wakeResult.isStandAloneCall) {
+                _isProcessingAi.value = false
+                val ackMsg = if (isAr) "نعم، تفضل أنا أسمعك وجاهز لتنفيذ أي أمر 🟢" else "Yes, I am listening and ready for commands 🟢"
+                val assistantMsg = ConversationMessage(
+                    text = ackMsg,
+                    isUser = false,
+                    biometricVerified = true,
+                    biometricConfidence = verification.matchPercentage
+                )
+                _conversation.value = _conversation.value + assistantMsg
+                if (config.voiceFeedbackEnabled && !config.muteAllAppSounds) {
+                    voiceEngine.speak(text = ackMsg, pitch = config.ttsPitch, speed = config.ttsSpeed)
+                }
+                return@launch
+            }
+
+            val commandToExecute = if (wakeResult.isWakeWordDetected && wakeResult.extractedCommand.isNotBlank()) {
+                wakeResult.extractedCommand
+            } else {
+                rawInput
+            }
+
+            // 3. Parse command via AI with multi-layer fallback
             try {
-                var parsed = repository.processVoiceCommand(rawInput)
+                var parsed = repository.processVoiceCommand(commandToExecute)
                 if (parsed.actionType == null) {
-                    val fallback = auraApp.geminiService.fallbackLocalInterpreter(rawInput, config.assistantName)
+                    val fallback = auraApp.geminiService.fallbackLocalInterpreter(commandToExecute, config.assistantName)
                     if (fallback.actionType != null) {
                         parsed = fallback
                     }
@@ -481,7 +545,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // 3. Autonomous Execution on Phone
+                // 4. Autonomous Execution on Phone
                 parsed.actionType?.let { action ->
                     if (action == ActionType.SYSTEM_SECURITY_SCAN) {
                         startFullSecurityScan()

@@ -131,7 +131,7 @@ class WakeWordManager {
             .replace('إ', 'ا')
             .replace('آ', 'ا')
             .replace('ٱ', 'ا')
-            .replace('ء', '')
+            .replace("ء", "")
             .replace('ئ', 'ي')
             .replace('ؤ', 'و')
             .replace('ة', 'ه')
