@@ -4,6 +4,7 @@ import android.app.Application
 import com.example.data.local.AppDatabase
 import com.example.data.remote.GeminiService
 import com.example.data.repository.AssistantRepository
+import com.example.service.AssistantForegroundService
 import com.example.system.ActionExecutionEngine
 import com.example.system.AppKnowledgeManager
 import com.example.system.DeviceTelemetryManager
@@ -15,6 +16,7 @@ import com.example.system.WakeWordManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 class AuraApplication : Application() {
@@ -38,6 +40,13 @@ class AuraApplication : Application() {
         applicationScope.launch {
             repository.seedInitialDataIfEmpty()
             appKnowledgeManager.scanAndIndexAllInstalledApps()
+
+            // Auto-start permanent background service on application launch
+            val config = repository.config.firstOrNull()
+            if (config == null || config.backgroundServiceEnabled) {
+                AssistantForegroundService.startService(this@AuraApplication)
+            }
         }
     }
 }
+

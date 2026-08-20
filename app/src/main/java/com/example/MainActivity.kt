@@ -74,7 +74,7 @@ import kotlin.math.sqrt
 enum class AppTab(val titleAr: String, val titleEn: String, val testTag: String) {
     VOICE("التحكم الصوتي", "Voice", "tab_voice"),
     SECURITY("فحص الأمان", "Security", "tab_security"),
-    DASHBOARD("المراقبة و LAN", "Dashboard", "tab_dashboard"),
+    DASHBOARD("المراقبة", "Monitoring", "tab_dashboard"),
     ARCHIVE("سجل الأرشفة", "Archive", "tab_archive"),
     SETTINGS("الإعدادات", "Settings", "tab_settings")
 }

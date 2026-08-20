@@ -67,18 +67,18 @@ class VoiceSpeechEngine(private val context: Context) {
     private var currentLanguage = "system"
     private var onResultCallback: ((String, List<Float>) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
-    private var consecutiveRecognizerErrors = 0
 
-    // AudioRecord Continuous Engine (Hardware non-stop stream)
-    private var audioRecordJob: Job? = null
-    private var audioRecord: AudioRecord? = null
-    private val isAudioRecordRunning = MutableStateFlow(false)
+    // Watchdog & Health Tracking
+    private var lastRecognizerEventTimestamp = System.currentTimeMillis()
+    private var watchdogJob: Job? = null
+    private var isRecognizerBusyOrStarting = false
 
     // Recent RMS buffer for biometric voiceprint analysis
     val recentRmsBuffer = mutableListOf<Float>()
 
     init {
         initTts()
+        startWatchdogEngine()
     }
 
     fun setMuteAllSounds(muted: Boolean) {
@@ -166,8 +166,7 @@ class VoiceSpeechEngine(private val context: Context) {
     }
 
     /**
-     * Start continuous, never-ending listening that keeps the microphone active
-     * without stopping even during prolonged periods of phone inactivity.
+     * Start continuous, permanent listening that never stops even during prolonged idle periods.
      */
     fun startContinuousListening(
         language: String = currentLanguage,
@@ -179,116 +178,215 @@ class VoiceSpeechEngine(private val context: Context) {
         onResultCallback = onResult
         onErrorCallback = onError
         _isListening.value = true
-
-        startContinuousAudioStream()
-    }
-
-    private fun startContinuousAudioStream() {
-        if (!isContinuousListeningMode) return
-
-        val isSystemSpeechAvailable = try {
-            SpeechRecognizer.isRecognitionAvailable(context)
-        } catch (e: Exception) {
-            false
-        }
-
-        if (!isSystemSpeechAvailable) {
-            startPersistentAudioRecordEngine()
-            return
-        }
-
-        val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
-        _isListening.value = true
+        lastRecognizerEventTimestamp = System.currentTimeMillis()
 
         mainHandler.post {
-            try {
-                if (speechRecognizer == null) {
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                        setRecognitionListener(object : RecognitionListener {
-                            override fun onReadyForSpeech(params: Bundle?) {
-                                _isListening.value = true
-                                _isUsingFallbackAcousticEngine.value = false
-                                consecutiveRecognizerErrors = 0
-                            }
+            createAndStartRecognizer()
+        }
+    }
 
-                            override fun onBeginningOfSpeech() {
-                                _isListening.value = true
-                            }
+    private fun createAndStartRecognizer() {
+        if (!isContinuousListeningMode) return
 
-                            override fun onRmsChanged(rmsdB: Float) {
-                                val normalized = (rmsdB.coerceAtLeast(0f) / 10f).coerceIn(0f, 1f)
-                                _rmsAudioLevel.value = normalized
-                                synchronized(recentRmsBuffer) {
-                                    if (recentRmsBuffer.size > 60) recentRmsBuffer.removeAt(0)
-                                    recentRmsBuffer.add(normalized)
-                                }
-                            }
-
-                            override fun onBufferReceived(buffer: ByteArray?) {}
-
-                            override fun onEndOfSpeech() {
-                                if (isContinuousListeningMode) {
-                                    _isListening.value = true
-                                }
-                            }
-
-                            override fun onError(error: Int) {
-                                consecutiveRecognizerErrors++
-                                if (consecutiveRecognizerErrors >= 3 || error == SpeechRecognizer.ERROR_CLIENT || error == 9) {
-                                    startPersistentAudioRecordEngine()
-                                    return
-                                }
-                                if (isContinuousListeningMode) {
-                                    _isListening.value = true
-                                    restartRecognizerSafely()
-                                }
-                            }
-
-                            override fun onResults(results: Bundle?) {
-                                consecutiveRecognizerErrors = 0
-                                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                val text = matches?.firstOrNull() ?: ""
-                                if (text.isNotBlank()) {
-                                    _lastRecognizedText.value = text
-                                    val copyBuffer = synchronized(recentRmsBuffer) { recentRmsBuffer.toList() }
-                                    onResultCallback?.invoke(text, copyBuffer)
-                                }
-                                if (isContinuousListeningMode) {
-                                    _isListening.value = true
-                                    restartRecognizerSafely()
-                                }
-                            }
-
-                            override fun onPartialResults(partialResults: Bundle?) {
-                                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                matches?.firstOrNull()?.let { _lastRecognizedText.value = it }
-                            }
-
-                            override fun onEvent(eventType: Int, params: Bundle?) {}
-                        })
-                    }
+        try {
+            if (speechRecognizer == null) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(AuraRecognitionListener())
                 }
+            }
 
+            val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
+            val langTag = if (effective == "ar") "ar-SA" else "en-US"
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
+                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                putExtra("android.speech.extra.DICTATION_MODE", true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                }
+                // Generous silence buffers to avoid cutting off natural speaking pauses
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+            }
+
+            silenceChimesTemporarily()
+            isRecognizerBusyOrStarting = true
+            speechRecognizer?.startListening(intent)
+            _isListening.value = true
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        } catch (e: Exception) {
+            Log.e("VoiceSpeechEngine", "Error starting speech recognizer", e)
+            recreateRecognizerInstance()
+        }
+    }
+
+    private inner class AuraRecognitionListener : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {
+            _isListening.value = true
+            isRecognizerBusyOrStarting = false
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+
+        override fun onBeginningOfSpeech() {
+            _isListening.value = true
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+
+        override fun onRmsChanged(rmsdB: Float) {
+            val normalized = (rmsdB.coerceAtLeast(0f) / 10f).coerceIn(0f, 1f)
+            _rmsAudioLevel.value = normalized
+            synchronized(recentRmsBuffer) {
+                if (recentRmsBuffer.size > 60) recentRmsBuffer.removeAt(0)
+                recentRmsBuffer.add(normalized)
+            }
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+
+        override fun onBufferReceived(buffer: ByteArray?) {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+
+        override fun onEndOfSpeech() {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+
+        override fun onError(error: Int) {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+            isRecognizerBusyOrStarting = false
+
+            if (!isContinuousListeningMode) return
+
+            // Normal idle timeouts or no-speech are NOT fatal errors.
+            // Instantly loop back and keep listening without annoying notifications or stops.
+            when (error) {
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+                SpeechRecognizer.ERROR_NO_MATCH -> {
+                    restartRecognizerImmediately(delayMs = 40)
+                }
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+                SpeechRecognizer.ERROR_CLIENT -> {
+                    // Reset and recreate cleanly
+                    recreateRecognizerInstance()
+                }
+                SpeechRecognizer.ERROR_AUDIO,
+                SpeechRecognizer.ERROR_SERVER,
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
+                    restartRecognizerImmediately(delayMs = 250)
+                }
+                else -> {
+                    restartRecognizerImmediately(delayMs = 150)
+                }
+            }
+        }
+
+        override fun onResults(results: Bundle?) {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+            isRecognizerBusyOrStarting = false
+
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            val text = matches?.firstOrNull() ?: ""
+            if (text.isNotBlank()) {
+                _lastRecognizedText.value = text
+                val copyBuffer = synchronized(recentRmsBuffer) { recentRmsBuffer.toList() }
+                onResultCallback?.invoke(text, copyBuffer)
+            }
+
+            if (isContinuousListeningMode) {
+                restartRecognizerImmediately(delayMs = 60)
+            }
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            matches?.firstOrNull()?.let { _lastRecognizedText.value = it }
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) {
+            lastRecognizerEventTimestamp = System.currentTimeMillis()
+        }
+    }
+
+    private fun restartRecognizerImmediately(delayMs: Long) {
+        if (!isContinuousListeningMode) return
+        mainHandler.postDelayed({
+            if (!isContinuousListeningMode) return@postDelayed
+            try {
+                val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
+                val langTag = if (effective == "ar") "ar-SA" else "en-US"
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    val langTag = if (effective == "ar") "ar-SA" else "en-US"
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
                     putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                     putExtra("android.speech.extra.DICTATION_MODE", true)
-                    // Generous pauses so slow speakers or thinking pauses are not cut off
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    }
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
                 }
-
                 silenceChimesTemporarily()
                 speechRecognizer?.startListening(intent)
+                _isListening.value = true
+                lastRecognizerEventTimestamp = System.currentTimeMillis()
             } catch (e: Exception) {
-                Log.e("VoiceSpeechEngine", "SpeechRecognizer failed, switching to persistent AudioRecord", e)
-                startPersistentAudioRecordEngine()
+                recreateRecognizerInstance()
+            }
+        }, delayMs)
+    }
+
+    private fun recreateRecognizerInstance() {
+        if (!isContinuousListeningMode) return
+        mainHandler.post {
+            try {
+                speechRecognizer?.stopListening()
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (e: Exception) {
+                // ignore
+            }
+            speechRecognizer = null
+            mainHandler.postDelayed({
+                if (isContinuousListeningMode) {
+                    createAndStartRecognizer()
+                }
+            }, 100)
+        }
+    }
+
+    /**
+     * Active Watchdog Coroutine:
+     * Checks recognizer state every 4 seconds. If the recognizer stalled or stopped
+     * during long periods of silence or OS idle state, it heals and restarts it automatically.
+     */
+    private fun startWatchdogEngine() {
+        watchdogJob?.cancel()
+        watchdogJob = engineScope.launch {
+            while (isActive) {
+                delay(4000)
+                if (isContinuousListeningMode) {
+                    val now = System.currentTimeMillis()
+                    // If no recognizer lifecycle event occurred for > 8 seconds, it may have hung or been put to sleep
+                    if (now - lastRecognizerEventTimestamp > 8000) {
+                        Log.d("VoiceSpeechEngine", "Watchdog triggered: Self-healing speech recognizer stream")
+                        mainHandler.post {
+                            recreateRecognizerInstance()
+                        }
+                    }
+                }
             }
         }
     }
@@ -306,136 +404,6 @@ class VoiceSpeechEngine(private val context: Context) {
         }
     }
 
-    private fun restartRecognizerSafely() {
-        if (!isContinuousListeningMode) return
-        mainHandler.postDelayed({
-            if (!isContinuousListeningMode) return@postDelayed
-            try {
-                val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    val langTag = if (effective == "ar") "ar-SA" else "en-US"
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
-                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
-                }
-                silenceChimesTemporarily()
-                speechRecognizer?.startListening(intent)
-            } catch (e: Exception) {
-                startPersistentAudioRecordEngine()
-            }
-        }, 50)
-    }
-
-    /**
-     * Self-contained persistent In-App Audio HAL engine using Android AudioRecord.
-     * Keeps the hardware microphone open continuously 24/7 with zero timeouts,
-     * zero open/close cycling, and zero system chimes/beeps.
-     */
-    private fun startPersistentAudioRecordEngine() {
-        if (isAudioRecordRunning.value) return
-
-        _isUsingFallbackAcousticEngine.value = true
-        _isListening.value = true
-        isAudioRecordRunning.value = true
-
-        audioRecordJob?.cancel()
-        audioRecordJob = engineScope.launch {
-            val sampleRate = 16000
-            val channelConfig = AudioFormat.CHANNEL_IN_MONO
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            val bufferSize = (minBufferSize * 2).coerceAtLeast(4096)
-
-            try {
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    channelConfig,
-                    audioFormat,
-                    bufferSize
-                )
-
-                if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                    _isListening.value = false
-                    isAudioRecordRunning.value = false
-                    return@launch
-                }
-
-                // Enable hardware acoustic echo cancellation & noise suppression
-                try {
-                    val sessionId = audioRecord?.audioSessionId ?: 0
-                    if (sessionId != 0) {
-                        if (AcousticEchoCanceler.isAvailable()) {
-                            AcousticEchoCanceler.create(sessionId)?.enabled = true
-                        }
-                        if (NoiseSuppressor.isAvailable()) {
-                            NoiseSuppressor.create(sessionId)?.enabled = true
-                        }
-                        if (AutomaticGainControl.isAvailable()) {
-                            AutomaticGainControl.create(sessionId)?.enabled = true
-                        }
-                    }
-                } catch (e: Exception) {
-                    // ignore
-                }
-
-                audioRecord?.startRecording()
-                val audioBuffer = ShortArray(bufferSize / 2)
-                var voiceFramesDetected = 0
-                val energyThreshold = 180.0
-
-                while (isActive && isContinuousListeningMode) {
-                    val readCount = audioRecord?.read(audioBuffer, 0, audioBuffer.size) ?: 0
-                    if (readCount > 0) {
-                        var sumSquare = 0.0
-                        for (i in 0 until readCount) {
-                            val sample = audioBuffer[i]
-                            sumSquare += (sample * sample)
-                        }
-                        val rms = sqrt(sumSquare / readCount)
-                        val normalized = (rms.toFloat() / 1500f).coerceIn(0f, 1f)
-                        _rmsAudioLevel.value = normalized
-
-                        synchronized(recentRmsBuffer) {
-                            if (recentRmsBuffer.size > 60) recentRmsBuffer.removeAt(0)
-                            recentRmsBuffer.add(normalized)
-                        }
-
-                        if (rms > energyThreshold) {
-                            voiceFramesDetected++
-                        } else {
-                            if (voiceFramesDetected > 10) {
-                                // Spoken phrase captured
-                                val copyBuffer = synchronized(recentRmsBuffer) { recentRmsBuffer.toList() }
-                                val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
-                                val fallbackPhrase = if (effective == "ar") "أمر صوتي مباشر" else "Direct Voice Command"
-                                onResultCallback?.invoke(fallbackPhrase, copyBuffer)
-                            }
-                            voiceFramesDetected = 0
-                        }
-                    }
-                    delay(25)
-                }
-            } catch (e: Exception) {
-                Log.e("VoiceSpeechEngine", "Error in persistent AudioRecord loop", e)
-            } finally {
-                try {
-                    audioRecord?.stop()
-                    audioRecord?.release()
-                } catch (e: Exception) {
-                    // ignore
-                }
-                audioRecord = null
-                isAudioRecordRunning.value = false
-                _isUsingFallbackAcousticEngine.value = false
-            }
-        }
-    }
-
     fun stopListening() {
         isContinuousListeningMode = false
         _isListening.value = false
@@ -448,21 +416,12 @@ class VoiceSpeechEngine(private val context: Context) {
                 // ignore
             }
         }
-
-        audioRecordJob?.cancel()
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (e: Exception) {
-            // ignore
-        }
-        audioRecord = null
-        isAudioRecordRunning.value = false
     }
 
     fun destroy() {
         stopListening()
         stopSpeaking()
+        watchdogJob?.cancel()
         mainHandler.post {
             try {
                 speechRecognizer?.destroy()
@@ -479,3 +438,4 @@ class VoiceSpeechEngine(private val context: Context) {
         }
     }
 }
+

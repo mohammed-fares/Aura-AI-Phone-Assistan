@@ -60,10 +60,21 @@ class GeminiService {
                 - CALL_CONTACT (Initiate phone call / dial contact or number, payload: contact name or number)
                 - END_CALL (End active phone call / hang up / disconnect)
                 - SEND_MESSAGE (Send SMS / text message, payload: "contact: message body" or recipient or message)
+                - SEND_WHATSAPP_MESSAGE (Send WhatsApp message, payload: "contact: message body")
+                - SEND_MESSENGER_MESSAGE (Send Facebook Messenger message, payload: "contact: message body")
+                - POST_FACEBOOK (Compose and publish post on Facebook, payload: post content text)
+                - COMMENT_ON_SCREEN (Type and submit comment on post/subject viewed on screen, payload: comment text)
                 - SEND_EMAIL (Compose/send email, payload: email or subject/body)
                 - OPEN_APP (Launch any installed app like WhatsApp, YouTube, Facebook, Telegram, TikTok, Instagram, etc., payload: app name)
-                - CLOSE_APP (Close active app / exit / go to home screen)
+                - CLOSE_APP (Close active app / exit / kill process, payload: app name or null)
                 - RETURN_HOME (Return to phone home screen)
+                - GLOBAL_BACK (Navigate back / return to previous screen)
+                - OPEN_RECENTS (Open recent apps switcher / overview)
+                - OPEN_NOTIFICATIONS (Open notification panel / pull down shade)
+                - SCROLL_UP (Scroll up on current screen)
+                - SCROLL_DOWN (Scroll down on current screen)
+                - CLICK_SCREEN_ELEMENT (Click button or text element on current screen, payload: element text)
+                - TAKE_SCREENSHOT (Capture screenshot of current screen)
                 - OPEN_CAMERA (Open camera / take photo / selfie)
                 - OPEN_GALLERY (Open photos, media gallery, studio)
                 - OPEN_CALCULATOR (Open calculator / do math)
@@ -286,7 +297,112 @@ class GeminiService {
         val isArabic = query.any { it in '\u0600'..'\u06FF' }
 
         return when {
-            // 1. Phone Calling (اتصال، مكالمة، رن، دق، خابر، تلفن، كلم)
+            // 1. WhatsApp Voice Messaging (واتساب، واتس، راسل على الواتس، رسالة واتس)
+            lower.containsAny("واتساب", "واتس", "whatsapp") && lower.containsAny("رسالة", "رساله", "ارسل", "أرسل", "ابعت", "دز", "راسل", "قل له", "خبره") -> {
+                val clean = query.replace(Regex("(?i)send whatsapp to|whatsapp to|whatsapp|ارسل رسالة واتساب الى|أرسل رسالة واتس لـ|ارسل واتساب لـ|ارسل واتس لـ|ابعت واتس لـ|راسل على الواتس|واتساب|واتس"), "").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "إرسال رسالة واتساب فورية" else "Send WhatsApp Message",
+                    responseSpeechText = if (isArabic) "جاري إرسال رسالة الواتساب تلقائياً 💬" else "Sending WhatsApp message 💬",
+                    actionType = ActionType.SEND_WHATSAPP_MESSAGE,
+                    actionPayload = clean.ifBlank { query }
+                )
+            }
+
+            // 2. Facebook Messenger Direct Messaging (ماسنجر، مسنجر، messenger)
+            lower.containsAny("ماسنجر", "مسنجر", "messenger") && lower.containsAny("رسالة", "رساله", "ارسل", "أرسل", "ابعت", "دز", "راسل", "خاص") -> {
+                val clean = query.replace(Regex("(?i)send messenger message to|messenger to|messenger|ارسل رسالة ماسنجر الى|أرسل رسالة ماسنجر لـ|ارسل ماسنجر لـ|ابعت مسج ماسنجر|راسل على الماسنجر|ماسنجر|مسنجر"), "").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "إرسال رسالة خاصة على ماسنجر" else "Send Messenger Message",
+                    responseSpeechText = if (isArabic) "جاري إرسال الرسالة عبر الماسنجر تلقائياً 💬" else "Sending Messenger message 💬",
+                    actionType = ActionType.SEND_MESSENGER_MESSAGE,
+                    actionPayload = clean.ifBlank { query }
+                )
+            }
+
+            // 3. Facebook Post Writing & Publishing (بوست فيسبوك، انشر بوست، اكتب بوست، انشر على الفيس)
+            lower.containsAny("بوست", "post") && lower.containsAny("فيس", "فيسبوك", "facebook", "انشر", "اكتب", "نشر") ||
+            (lower.containsAny("انشر على الفيس", "انشر على الفيسبوك", "اكتب على الفيس", "اكتب على الفيسبوك", "نزل بوست", "نزل منشور", "انشر منشور")) -> {
+                val postContent = query.replace(Regex("(?i)post on facebook|facebook post|انشر بوست على الفيس بوك|انشر بوست على الفيس|اكتب بوست على فيسبوك|انشر على صفحتي بالفيس|انشر منشور|نزل بوست|اكتب بوست|انشر بوست|بوست فيسبوك|بوست"), "").trim().removePrefix(":").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "كتابة ونشر منشور على فيسبوك" else "Publish Facebook Post",
+                    responseSpeechText = if (isArabic) "جاري كتابة المنشور ونشره على فيسبوك فوراً 📘" else "Publishing Facebook post 📘",
+                    actionType = ActionType.POST_FACEBOOK,
+                    actionPayload = postContent.ifBlank { "مرحباً بكم جميعاً" }
+                )
+            }
+
+            // 4. Autonomous Comment on Screen (علق على هذا الموضوع، اكتب تعليق، علق على البوست المعروض)
+            lower.containsAny("اكتب تعليق", "أكتب تعليق", "علق على", "علق بـ", "علق على البوست", "علق على الموضوع", "علقلي", "أضف تعليق", "اضف تعليق", "write a comment", "comment on this", "post comment") -> {
+                val commentContent = query.replace(Regex("(?i)write a comment|comment on this|comment|اكتب تعليق على هذا الموضوع|علق على هذا الموضوع|علق على البوست المعروض|علق على البوست|اكتب تعليق|أكتب تعليق|علق بـ|علق|أضف تعليق|اضف تعليق"), "").trim().removePrefix(":").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "كتابة تعليق على الموضوع المعروض في الشاشة" else "Comment on Screen",
+                    responseSpeechText = if (isArabic) "تمت كتابة وإرسال التعليق على الموضوع المعروض 💬" else "Comment submitted on screen 💬",
+                    actionType = ActionType.COMMENT_ON_SCREEN,
+                    actionPayload = commentContent.ifBlank { "أحسنت، ممتاز!" }
+                )
+            }
+
+            // 5. Universal App Closing & Exiting (اغلق تطبيق، اقفل الفيس، سكر الواتس، اغلق البرنامج، اغلق هذا التطبيق)
+            lower.containsAny("اغلق تطبيق", "إغلاق تطبيق", "اقفل تطبيق", "سكر تطبيق", "اغلق برنامج", "اقفل برنامج", "اغلق الفيس", "اقفل الفيس", "سكر الفيس", "اغلق الواتس", "اقفل الواتس", "سكر الواتس", "اغلق اليوتيوب", "اقفل اليوتيوب", "اغلق التيك توك", "اغلق التليجرام", "اغلق الماسنجر", "اغلق التطبيق", "اقفل التطبيق", "سكر التطبيق", "close app", "kill app", "exit app") -> {
+                val appToClose = query.replace(Regex("(?i)close app|kill app|exit app|close|اغلق تطبيق|إغلاق تطبيق|اقفل تطبيق|سكر تطبيق|اغلق برنامج|اقفل برنامج|اغلق|اقفل|سكر|التطبيق"), "").trim()
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "إغلاق التطبيق والخروج للشاشة الرئيسية" else "Close App",
+                    responseSpeechText = if (isArabic) "تم إغلاق التطبيق والعودة للشاشة الرئيسية 🏠" else "App closed and returned to Home 🏠",
+                    actionType = ActionType.CLOSE_APP,
+                    actionPayload = appToClose.ifBlank { null }
+                )
+            }
+
+            // 6. Navigation & Phone Gestures (رجوع، ارجع للخلف، الاشعارات، التطبيقات السابقة، انزل، اطلع، لقطة شاشة)
+            lower.containsAny("ارجع", "رجوع", "ارجع لورا", "ارجع للخلف", "للخلف", "go back", "back") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "الرجوع للخلف" else "Navigate Back",
+                    responseSpeechText = if (isArabic) "تم الرجوع للشاشة السابقة 🔙" else "Navigated back 🔙",
+                    actionType = ActionType.GLOBAL_BACK
+                )
+            }
+
+            lower.containsAny("الاشعارات", "الإشعارات", "شريط الاشعارات", "لوحة الاشعارات", "notifications", "notification shade") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "فتح لوحة الإشعارات" else "Open Notifications",
+                    responseSpeechText = if (isArabic) "تم فتح لوحة الإشعارات 🔔" else "Notification panel opened 🔔",
+                    actionType = ActionType.OPEN_NOTIFICATIONS
+                )
+            }
+
+            lower.containsAny("التطبيقات السابقة", "التطبيقات المفتوحة", "البرامج المفتوحة", "recents", "recent apps", "overview") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "عرض التطبيقات المفتوحة مؤخراً" else "Open Recent Apps",
+                    responseSpeechText = if (isArabic) "تم فتح قائمة التطبيقات السابقة 📑" else "Recent apps opened 📑",
+                    actionType = ActionType.OPEN_RECENTS
+                )
+            }
+
+            lower.containsAny("انزل لتحت", "انزل تحت", "مرر لتحت", "مرر لأسفل", "مرر للأسفل", "scroll down") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "التمرير لأسفل الشاشة" else "Scroll Down",
+                    responseSpeechText = if (isArabic) "تم التمرير لأسفل ⬇️" else "Scrolled down ⬇️",
+                    actionType = ActionType.SCROLL_DOWN
+                )
+            }
+
+            lower.containsAny("اطلع لفوق", "اطلع فوق", "مرر لفوق", "مرر لأعلى", "مرر للاعلى", "scroll up") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "التمرير لأعلى الشاشة" else "Scroll Up",
+                    responseSpeechText = if (isArabic) "تم التمرير لأعلى ⬆️" else "Scrolled up ⬆️",
+                    actionType = ActionType.SCROLL_UP
+                )
+            }
+
+            lower.containsAny("لقطة شاشة", "صورة للشاشة", "صور الشاشة", "سكرين شوت", "screenshot", "screen capture") -> {
+                ParsedVoiceAction(
+                    understoodText = if (isArabic) "التقاط لقطة شاشة" else "Take Screenshot",
+                    responseSpeechText = if (isArabic) "تم التقاط صورة للشاشة 📸" else "Screenshot captured 📸",
+                    actionType = ActionType.TAKE_SCREENSHOT
+                )
+            }
+
+            // 7. Phone Calling (اتصال، مكالمة، رن، دق، خابر، تلفن، كلم)
             lower.containsAny("اتصل", "رن على", "رن علي", "دق على", "دق علي", "خابر", "تلفن", "كلم", "اتصلي", "اتصل لي", "اجري مكالمة", "مكالمة", "call", "dial", "phone") -> {
                 val target = query.replace(Regex("(?i)call|dial|phone|make a call to|اتصل بـ|اتصل على|اتصل علي|اتصل لي بـ|اتصل لي|اتصل|رن على|رن علي|دق على|دق علي|خابر|تلفن لـ|تلفن|كلم|مكالمة لـ|مكالمة"), "").trim()
                 ParsedVoiceAction(
@@ -297,7 +413,7 @@ class GeminiService {
                 )
             }
 
-            // 2. End / Hangup Active Call (انه المكالمة، سكر الخط، اقفل الخط، اقفل المكالمة، سكر المكالمة، اقطع الخط)
+            // 8. End / Hangup Active Call (انه المكالمة، سكر الخط، اقفل الخط، اقفل المكالمة، سكر المكالمة، اقطع الخط)
             lower.containsAny("انه المكالمة", "إنهاء المكالمة", "انهاء المكالمة", "اقفل الخط", "اقفل المكالمة", "سكر الخط", "سكر المكالمة", "اغلق المكالمة", "إغلاق المكالمة", "اقطع الخط", "اقطع المكالمة", "سكر التلفون", "hang up", "end call", "terminate call", "disconnect call", "cancel call") -> {
                 ParsedVoiceAction(
                     understoodText = if (isArabic) "إنهاء المكالمة وإغلاق الخط" else "End Active Call",
@@ -306,7 +422,7 @@ class GeminiService {
                 )
             }
 
-            // 3. SMS & Text Messages (رسالة، مسج، ابعت، دز، راسل، ارسل رسالة)
+            // 9. SMS & Text Messages (رسالة، مسج، ابعت، دز، راسل، ارسل رسالة)
             lower.containsAny("رسالة", "رساله", "مسج", "مسجات", "sms", "text message", "send text", "ابعت", "دز", "راسل", "أرسل لـ", "ارسل لـ", "ابعث لـ") -> {
                 val clean = query.replace(Regex("(?i)send message to|send sms to|send text to|sms|message|ارسل رسالة الى|أرسل رسالة إلى|ارسل رساله ل|ارسل رسالة|رسالة الى|رسالة لـ|رسالة|ابعت مسج لـ|ابعت مسج|دز رسالة لـ|راسل|ابعث"), "").trim()
                 ParsedVoiceAction(
@@ -317,7 +433,7 @@ class GeminiService {
                 )
             }
 
-            // 4. Flashlight / Torch (كشاف، ضوء، فلاش، لمبة، نور، طفي النور، شغل النور)
+            // 10. Flashlight / Torch (كشاف، ضوء، فلاش، لمبة، نور، طفي النور، شغل النور)
             lower.containsAny("كشاف", "فلاش", "ضوء", "لمبة", "نور", "torch", "flashlight") -> {
                 ParsedVoiceAction(
                     understoodText = if (isArabic) "التحكم في كشاف الهاتف" else "Toggle Flashlight",
@@ -326,8 +442,8 @@ class GeminiService {
                 )
             }
 
-            // 5. Close App & Return Home (الرئيسية، اخرج، اقفل التطبيق، سكر التطبيق، اغلق التطبيق، اطلع برا، الصفحة الرئيسية)
-            lower.containsAny("اغلق التطبيق", "إغلاق التطبيق", "اقفل التطبيق", "سكر التطبيق", "اخرج", "الرئيسية", "الشاشة الرئيسية", "الصفحة الرئيسية", "روح للرئيسية", "ارجع للرئيسية", "اطلع برا", "سكر كل شي", "close app", "return home", "go home", "exit app", "home screen") -> {
+            // 11. Close App & Return Home (الرئيسية، اخرج، الصفحة الرئيسية)
+            lower.containsAny("اخرج", "الرئيسية", "الشاشة الرئيسية", "الصفحة الرئيسية", "روح للرئيسية", "ارجع للرئيسية", "اطلع برا", "سكر كل شي", "return home", "go home", "home screen") -> {
                 ParsedVoiceAction(
                     understoodText = if (isArabic) "العودة للشاشة الرئيسية وإغلاق الواجهة" else "Return to Home Screen",
                     responseSpeechText = if (isArabic) "تم إغلاق الواجهة والعودة للشاشة الرئيسية 🏠" else "Returned to Home screen 🏠",

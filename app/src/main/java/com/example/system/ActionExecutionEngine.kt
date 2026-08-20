@@ -194,7 +194,195 @@ class ActionExecutionEngine(private val context: Context) {
                 }
             }
 
-            ActionType.CLOSE_APP, ActionType.RETURN_HOME -> {
+            ActionType.SEND_WHATSAPP_MESSAGE -> {
+                val input = payload?.trim() ?: ""
+                var targetContact = ""
+                var messageBody = input
+
+                if (input.contains(":") || input.contains("->") || input.contains("|")) {
+                    val parts = input.split(Regex("[:->|]"), limit = 2)
+                    targetContact = parts[0].trim()
+                    messageBody = parts.getOrNull(1)?.trim() ?: ""
+                }
+
+                val resolvedNumber = if (targetContact.isNotBlank()) {
+                    resolveContactNumber(targetContact) ?: targetContact
+                } else ""
+
+                if (accessibility != null) {
+                    accessibility.dispatchAutonomousWhatsApp(resolvedNumber, messageBody, autoReturnHome = true) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    try {
+                        val cleanPhone = resolvedNumber.replace(Regex("[^0-9+]"), "")
+                        val url = if (cleanPhone.isNotBlank()) {
+                            "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(messageBody)}"
+                        } else {
+                            "https://api.whatsapp.com/send?text=${Uri.encode(messageBody)}"
+                        }
+                        val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            `package` = "com.whatsapp"
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(waIntent)
+                        onFeedback(if (isAr) "تم تجهيز رسالة الواتساب للإرسال 💬" else "WhatsApp message prepared 💬")
+                    } catch (e: Exception) {
+                        onFeedback(if (isAr) "تعذر فتح تطبيق الواتساب" else "WhatsApp unavailable")
+                    }
+                }
+            }
+
+            ActionType.SEND_MESSENGER_MESSAGE -> {
+                val input = payload?.trim() ?: ""
+                var targetContact = ""
+                var messageBody = input
+
+                if (input.contains(":") || input.contains("->") || input.contains("|")) {
+                    val parts = input.split(Regex("[:->|]"), limit = 2)
+                    targetContact = parts[0].trim()
+                    messageBody = parts.getOrNull(1)?.trim() ?: ""
+                }
+
+                if (accessibility != null) {
+                    accessibility.dispatchAutonomousMessenger(targetContact, messageBody, autoReturnHome = false) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    try {
+                        val messengerIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, messageBody)
+                            `package` = "com.facebook.orca"
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(messengerIntent)
+                        onFeedback(if (isAr) "تم فتح الماسنجر وتجهيز الرسالة 💬" else "Messenger launched with message 💬")
+                    } catch (e: Exception) {
+                        onFeedback(if (isAr) "تطبيق الماسنجر غير مثبت" else "Messenger app not installed")
+                    }
+                }
+            }
+
+            ActionType.POST_FACEBOOK -> {
+                val postText = payload?.trim() ?: ""
+                if (accessibility != null) {
+                    accessibility.dispatchAutonomousFacebookPost(postText, autoReturnHome = false) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    try {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, postText)
+                            `package` = "com.facebook.katana"
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(shareIntent)
+                        onFeedback(if (isAr) "تم فتح فيسبوك ومشاركة المنشور 📘" else "Facebook post composer opened 📘")
+                    } catch (e: Exception) {
+                        onFeedback(if (isAr) "تطبيق فيسبوك غير مثبت" else "Facebook app not installed")
+                    }
+                }
+            }
+
+            ActionType.COMMENT_ON_SCREEN -> {
+                val commentText = payload?.trim() ?: ""
+                if (accessibility != null) {
+                    accessibility.dispatchAutonomousCommentOnScreen(commentText) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    onFeedback(if (isAr) "يرجى تفعيل خدمة إمكانية الوصول للتعليق التلقائي على الشاشة" else "Accessibility service required for autonomous commenting")
+                }
+            }
+
+            ActionType.GLOBAL_BACK -> {
+                if (accessibility != null) {
+                    accessibility.navigateBack()
+                    onFeedback(if (isAr) "تم الرجوع للخلف 🔙" else "Navigated back 🔙")
+                } else {
+                    onFeedback(if (isAr) "تم إرسال إشارة الرجوع" else "Back command triggered")
+                }
+            }
+
+            ActionType.OPEN_RECENTS -> {
+                if (accessibility != null) {
+                    accessibility.openRecents()
+                    onFeedback(if (isAr) "تم فتح التطبيقات المفتوحة مؤخراً 📑" else "Recent apps opened 📑")
+                } else {
+                    onFeedback(if (isAr) "تم فتح شاشة التطبيقات السابقة" else "Recent tasks triggered")
+                }
+            }
+
+            ActionType.OPEN_NOTIFICATIONS -> {
+                if (accessibility != null) {
+                    accessibility.openNotifications()
+                    onFeedback(if (isAr) "تم فتح لوحة الإشعارات 🔔" else "Notification panel opened 🔔")
+                } else {
+                    onFeedback(if (isAr) "تم فتح الإشعارات" else "Notifications triggered")
+                }
+            }
+
+            ActionType.SCROLL_DOWN -> {
+                if (accessibility != null) {
+                    val scrolled = accessibility.scrollDown()
+                    onFeedback(if (isAr) "تم التمرير لأسفل الشاشة ⬇️" else "Scrolled down ⬇️")
+                } else {
+                    onFeedback(if (isAr) "تم التمرير لأسفل" else "Scrolled down")
+                }
+            }
+
+            ActionType.SCROLL_UP -> {
+                if (accessibility != null) {
+                    val scrolled = accessibility.scrollUp()
+                    onFeedback(if (isAr) "تم التمرير لأعلى الشاشة ⬆️" else "Scrolled up ⬆️")
+                } else {
+                    onFeedback(if (isAr) "تم التمرير لأعلى" else "Scrolled up")
+                }
+            }
+
+            ActionType.CLICK_SCREEN_ELEMENT -> {
+                val elementText = payload?.trim() ?: ""
+                if (accessibility != null && elementText.isNotBlank()) {
+                    accessibility.performClickOnNode(listOf(elementText)) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    onFeedback(if (isAr) "تم محاولة الضغط على: $payload" else "Attempted click on: $payload")
+                }
+            }
+
+            ActionType.TAKE_SCREENSHOT -> {
+                if (accessibility != null) {
+                    val shot = accessibility.takeScreenshot()
+                    onFeedback(if (isAr) "تم التقاط صورة للشاشة 📸" else "Screenshot captured 📸")
+                } else {
+                    onFeedback(if (isAr) "تم إرسال أمر لقطة الشاشة 📸" else "Screenshot action triggered 📸")
+                }
+            }
+
+            ActionType.CLOSE_APP -> {
+                val appToClose = payload?.trim()
+                if (accessibility != null) {
+                    accessibility.dispatchCloseApp(appToClose) { status ->
+                        onFeedback(status)
+                    }
+                } else {
+                    try {
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        context.startActivity(homeIntent)
+                        onFeedback(if (isAr) "تم إغلاق التطبيق والعودة للشاشة الرئيسية 🏠" else "Closed app and returned to Home 🏠")
+                    } catch (e: Exception) {
+                        onFeedback(if (isAr) "تم إغلاق التطبيق" else "App closed")
+                    }
+                }
+            }
+
+            ActionType.RETURN_HOME -> {
                 if (accessibility != null) {
                     accessibility.navigateHome()
                     onFeedback(

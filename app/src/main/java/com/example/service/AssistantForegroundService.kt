@@ -1,16 +1,20 @@
 package com.example.service
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.example.AuraApplication
 import com.example.MainActivity
@@ -20,19 +24,41 @@ import com.example.data.local.entity.TelemetrySeverity
 import com.example.data.local.entity.TelemetryType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class AssistantForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var wakeLock: PowerManager.WakeLock? = null
+    private var heartbeatJob: Job? = null
 
     private lateinit var auraApp: AuraApplication
+
+    private val systemStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            // Keep speech engine active and listening on screen unlock / screen on / power connect
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON,
+                Intent.ACTION_USER_PRESENT,
+                Intent.ACTION_POWER_CONNECTED -> {
+                    acquireWakeLock()
+                    ensureListeningActive()
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    acquireWakeLock()
+                    ensureListeningActive()
+                }
+            }
+        }
+    }
 
     companion object {
         const val CHANNEL_ID = "aura_assistant_background_channel"
@@ -45,17 +71,21 @@ class AssistantForegroundService : Service() {
         private val _isServiceRunning = MutableStateFlow(false)
         val isServiceRunning = _isServiceRunning.asStateFlow()
 
-        private val _lastBackgroundActionStatus = MutableStateFlow<String?>("الخدمة قيد التشغيل في الخلفية")
+        private val _lastBackgroundActionStatus = MutableStateFlow<String?>("الخدمة قيد التشغيل في الخلفية 🟢")
         val lastBackgroundActionStatus = _lastBackgroundActionStatus.asStateFlow()
 
         fun startService(context: Context) {
-            val intent = Intent(context, AssistantForegroundService::class.java).apply {
-                action = ACTION_START
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, AssistantForegroundService::class.java).apply {
+                    action = ACTION_START
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                // ignore
             }
         }
 
@@ -72,6 +102,22 @@ class AssistantForegroundService : Service() {
         auraApp = application as AuraApplication
         createNotificationChannel()
         acquireWakeLock()
+        registerSystemReceivers()
+        startServiceHeartbeat()
+    }
+
+    private fun registerSystemReceivers() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+        }
+        try {
+            registerReceiver(systemStateReceiver, filter)
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -94,7 +140,7 @@ class AssistantForegroundService : Service() {
 
     private fun startForegroundWithNotification() {
         _isServiceRunning.value = true
-        val notification = buildForegroundNotification("المساعد يستمع في الخلفية 🟢 - جاهز لتنفيذ الأوامر")
+        val notification = buildForegroundNotification("المساعد يعمل دائماً في الخلفية 🟢 - جاهز لتنفيذ الأوامر تلقائياً")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(
@@ -130,9 +176,9 @@ class AssistantForegroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("المساعد الذكي والتحكم الذاتي (في الخلفية)")
+            .setContentTitle("المساعد الذكي المستمر (تلقائي دائم)")
             .setContentText(statusText)
-            .setSubText("مراقبة مستمرة بدون لمس الشاشة")
+            .setSubText("يعمل باستمرار دون الحاجة لإعادة فتح التطبيق")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openAppPendingIntent)
@@ -144,6 +190,28 @@ class AssistantForegroundService : Service() {
         val notification = buildForegroundNotification(statusText)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun ensureListeningActive() {
+        val voiceEngine = auraApp.voiceSpeechEngine
+        if (!voiceEngine.isListening.value) {
+            startBackgroundListeningLoop()
+        }
+    }
+
+    private fun startServiceHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = serviceScope.launch {
+            while (isActive) {
+                delay(5000)
+                if (_isServiceRunning.value) {
+                    val voiceEngine = auraApp.voiceSpeechEngine
+                    if (!voiceEngine.isListening.value) {
+                        startBackgroundListeningLoop()
+                    }
+                }
+            }
+        }
     }
 
     private fun startBackgroundListeningLoop() {
@@ -263,13 +331,17 @@ class AssistantForegroundService : Service() {
 
     private fun acquireWakeLock() {
         try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = powerManager?.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "AuraAssistant::BackgroundExecutionWakeLock"
-            )?.apply {
-                setReferenceCounted(false)
-                acquire(24 * 60 * 60 * 1000L) // 24 hours max
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                wakeLock = powerManager?.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "AuraAssistant::BackgroundExecutionWakeLock"
+                )?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire(24 * 60 * 60 * 1000L) // 24 hours max
             }
         } catch (e: Exception) {
             // Ignore wakelock acquisition failure
@@ -290,14 +362,39 @@ class AssistantForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "خدمة المساعد في الخلفية (Always-On Agent)",
+                "خدمة المساعد الدائم (Always-On Background Assistant)",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "إشعار دائم لتشغيل المساعد والتحكم بالأوامر في الخلفية حتى مع إغلاق الشاشة"
+                description = "خدمة المساعد التلقائي الدائم للاستماع وتنفيذ الأوامر بدون لمس الهاتف"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // Self-heal: If app task is swiped away from recent apps, reschedule service restart immediately
+        try {
+            val restartServiceIntent = Intent(applicationContext, AssistantForegroundService::class.java).apply {
+                setPackage(packageName)
+                action = ACTION_START
+            }
+            val restartPendingIntent = PendingIntent.getService(
+                applicationContext,
+                101,
+                restartServiceIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 1000,
+                restartPendingIntent
+            )
+        } catch (e: Exception) {
+            // ignore
         }
     }
 
@@ -311,6 +408,12 @@ class AssistantForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(systemStateReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        heartbeatJob?.cancel()
         _isServiceRunning.value = false
         releaseWakeLock()
         serviceScope.cancel()

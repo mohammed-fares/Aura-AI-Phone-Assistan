@@ -7,10 +7,21 @@ enum class ActionType {
     CALL_CONTACT,          // Make phone call / dial
     END_CALL,              // End / hang up active phone call
     SEND_MESSAGE,          // Send SMS / text message
+    SEND_WHATSAPP_MESSAGE, // Send WhatsApp message to contact or number
+    SEND_MESSENGER_MESSAGE,// Send private Facebook Messenger message
+    POST_FACEBOOK,         // Write and publish post on Facebook
+    COMMENT_ON_SCREEN,     // Type and submit comment on post/subject viewed on screen
     SEND_EMAIL,            // Compose and send email
     OPEN_APP,              // Launch any installed app
-    CLOSE_APP,             // Close app / exit top task
+    CLOSE_APP,             // Close app / exit top task / kill process
     RETURN_HOME,           // Return to Home screen
+    GLOBAL_BACK,           // Press Back navigation
+    OPEN_RECENTS,          // Open recent apps switcher
+    OPEN_NOTIFICATIONS,    // Open notification shade
+    SCROLL_UP,             // Scroll up on active screen
+    SCROLL_DOWN,           // Scroll down on active screen
+    CLICK_SCREEN_ELEMENT,  // Click button / text on active screen
+    TAKE_SCREENSHOT,       // Capture screen snapshot
     OPEN_CAMERA,           // Open system camera
     OPEN_GALLERY,          // Open photos and media gallery
     OPEN_CALCULATOR,       // Open calculator
