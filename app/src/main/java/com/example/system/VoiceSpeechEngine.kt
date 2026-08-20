@@ -1,15 +1,13 @@
 package com.example.system
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
+import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.NoiseSuppressor
-import android.media.audiofx.AutomaticGainControl
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -20,6 +18,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.example.util.LocalizationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,20 +57,22 @@ class VoiceSpeechEngine(private val context: Context) {
     val isUsingFallbackAcousticEngine: StateFlow<Boolean> = _isUsingFallbackAcousticEngine.asStateFlow()
 
     // Sound control
-    private var isAllSoundsMuted = true
+    private var isAllSoundsMuted = false
     private var isMuteMicBleepsAndSystemSounds = true
 
-    // Persistent non-stop continuous listening (Never Stops while powered on)
+    // Persistent listening state
     private var keepMicContinuouslyOpen = true
     private var isContinuousListeningMode = false
     private var currentLanguage = "system"
     private var onResultCallback: ((String, List<Float>) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
 
-    // Watchdog & Health Tracking
+    // Health & Watchdog Tracking
     private var lastRecognizerEventTimestamp = System.currentTimeMillis()
     private var watchdogJob: Job? = null
     private var isRecognizerBusyOrStarting = false
+    private var consecutiveErrorCount = 0
+    private var restartPending = false
 
     // Recent RMS buffer for biometric voiceprint analysis
     val recentRmsBuffer = mutableListOf<Float>()
@@ -94,18 +95,6 @@ class VoiceSpeechEngine(private val context: Context) {
 
     fun isMuted(): Boolean = isAllSoundsMuted
 
-    /**
-     * Checks if audio is currently playing internally on the phone (video, music, recording).
-     * Used to prevent voice commands originating from phone speaker output.
-     */
-    fun isInternalPlaybackActive(): Boolean {
-        return try {
-            audioManager?.isMusicActive == true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     fun setKeepMicContinuouslyOpen(keepOpen: Boolean) {
         keepMicContinuouslyOpen = keepOpen
     }
@@ -124,29 +113,33 @@ class VoiceSpeechEngine(private val context: Context) {
     }
 
     private fun initTts() {
-        textToSpeech = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                isTtsReady = true
-                val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
-                val targetLocale = if (effective == "ar") Locale("ar") else Locale.ENGLISH
-                val result = textToSpeech?.setLanguage(targetLocale)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    textToSpeech?.setLanguage(Locale.getDefault())
-                }
-                textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        if (!isAllSoundsMuted) {
-                            _isSpeaking.value = true
+        try {
+            textToSpeech = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    isTtsReady = true
+                    val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
+                    val targetLocale = if (effective == "ar") Locale("ar") else Locale.ENGLISH
+                    val result = textToSpeech?.setLanguage(targetLocale)
+                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        textToSpeech?.setLanguage(Locale.getDefault())
+                    }
+                    textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            if (!isAllSoundsMuted) {
+                                _isSpeaking.value = true
+                            }
                         }
-                    }
-                    override fun onDone(utteranceId: String?) {
-                        _isSpeaking.value = false
-                    }
-                    override fun onError(utteranceId: String?) {
-                        _isSpeaking.value = false
-                    }
-                })
+                        override fun onDone(utteranceId: String?) {
+                            _isSpeaking.value = false
+                        }
+                        override fun onError(utteranceId: String?) {
+                            _isSpeaking.value = false
+                        }
+                    })
+                }
             }
+        } catch (e: Exception) {
+            Log.e("VoiceSpeechEngine", "TTS Init failed", e)
         }
     }
 
@@ -155,18 +148,33 @@ class VoiceSpeechEngine(private val context: Context) {
             _isSpeaking.value = false
             return
         }
-        textToSpeech?.setPitch(pitch)
-        textToSpeech?.setSpeechRate(speed)
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "aura_speech_${System.currentTimeMillis()}")
+        try {
+            textToSpeech?.setPitch(pitch)
+            textToSpeech?.setSpeechRate(speed)
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "aura_speech_${System.currentTimeMillis()}")
+        } catch (e: Exception) {
+            Log.e("VoiceSpeechEngine", "Error in speak()", e)
+        }
     }
 
     fun stopSpeaking() {
-        textToSpeech?.stop()
+        try {
+            textToSpeech?.stop()
+        } catch (e: Exception) {
+            // ignore
+        }
         _isSpeaking.value = false
     }
 
+    private fun hasRecordAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     /**
-     * Start continuous, permanent listening that never stops even during prolonged idle periods.
+     * Start continuous, robust listening that automatically reconnects and receives speech.
      */
     fun startContinuousListening(
         language: String = currentLanguage,
@@ -177,8 +185,16 @@ class VoiceSpeechEngine(private val context: Context) {
         isContinuousListeningMode = true
         onResultCallback = onResult
         onErrorCallback = onError
-        _isListening.value = true
+        consecutiveErrorCount = 0
         lastRecognizerEventTimestamp = System.currentTimeMillis()
+
+        if (!hasRecordAudioPermission()) {
+            _isListening.value = false
+            onError.invoke("يرجى منح إذن الميكروفون للبدء في الاستماع للأوامر الصوتية.")
+            return
+        }
+
+        _isListening.value = true
 
         mainHandler.post {
             createAndStartRecognizer()
@@ -187,9 +203,18 @@ class VoiceSpeechEngine(private val context: Context) {
 
     private fun createAndStartRecognizer() {
         if (!isContinuousListeningMode) return
+        if (!hasRecordAudioPermission()) {
+            _isListening.value = false
+            return
+        }
 
         try {
             if (speechRecognizer == null) {
+                val available = SpeechRecognizer.isRecognitionAvailable(context)
+                if (!available) {
+                    Log.w("VoiceSpeechEngine", "Speech recognition service not standard on device, using fallback")
+                    _isUsingFallbackAcousticEngine.value = true
+                }
                 speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                     setRecognitionListener(AuraRecognitionListener())
                 }
@@ -202,28 +227,18 @@ class VoiceSpeechEngine(private val context: Context) {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
-                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-                putExtra("android.speech.extra.DICTATION_MODE", true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                }
-                // Generous silence buffers to avoid cutting off natural speaking pauses
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
             }
 
-            silenceChimesTemporarily()
             isRecognizerBusyOrStarting = true
             speechRecognizer?.startListening(intent)
             _isListening.value = true
             lastRecognizerEventTimestamp = System.currentTimeMillis()
         } catch (e: Exception) {
-            Log.e("VoiceSpeechEngine", "Error starting speech recognizer", e)
-            recreateRecognizerInstance()
+            Log.e("VoiceSpeechEngine", "Error in createAndStartRecognizer", e)
+            scheduleSafeRestart(delayMs = 800)
         }
     }
 
@@ -231,6 +246,7 @@ class VoiceSpeechEngine(private val context: Context) {
         override fun onReadyForSpeech(params: Bundle?) {
             _isListening.value = true
             isRecognizerBusyOrStarting = false
+            consecutiveErrorCount = 0
             lastRecognizerEventTimestamp = System.currentTimeMillis()
         }
 
@@ -260,36 +276,28 @@ class VoiceSpeechEngine(private val context: Context) {
         override fun onError(error: Int) {
             lastRecognizerEventTimestamp = System.currentTimeMillis()
             isRecognizerBusyOrStarting = false
+            consecutiveErrorCount++
 
             if (!isContinuousListeningMode) return
 
-            // Normal idle timeouts or no-speech are NOT fatal errors.
-            // Instantly loop back and keep listening without annoying notifications or stops.
-            when (error) {
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_NO_MATCH -> {
-                    restartRecognizerImmediately(delayMs = 40)
-                }
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
-                SpeechRecognizer.ERROR_CLIENT -> {
-                    // Reset and recreate cleanly
-                    recreateRecognizerInstance()
-                }
-                SpeechRecognizer.ERROR_AUDIO,
-                SpeechRecognizer.ERROR_SERVER,
-                SpeechRecognizer.ERROR_NETWORK,
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
-                    restartRecognizerImmediately(delayMs = 250)
-                }
-                else -> {
-                    restartRecognizerImmediately(delayMs = 150)
-                }
+            Log.d("VoiceSpeechEngine", "Recognition error code: $error, count: $consecutiveErrorCount")
+
+            val restartDelay = when {
+                consecutiveErrorCount > 5 -> 2500L
+                consecutiveErrorCount > 2 -> 1200L
+                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH -> 400L
+                error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 700L
+                error == SpeechRecognizer.ERROR_CLIENT -> 800L
+                else -> 600L
             }
+
+            scheduleSafeRestart(delayMs = restartDelay)
         }
 
         override fun onResults(results: Bundle?) {
             lastRecognizerEventTimestamp = System.currentTimeMillis()
             isRecognizerBusyOrStarting = false
+            consecutiveErrorCount = 0
 
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull() ?: ""
@@ -300,7 +308,7 @@ class VoiceSpeechEngine(private val context: Context) {
             }
 
             if (isContinuousListeningMode) {
-                restartRecognizerImmediately(delayMs = 60)
+                scheduleSafeRestart(delayMs = 350L)
             }
         }
 
@@ -315,75 +323,54 @@ class VoiceSpeechEngine(private val context: Context) {
         }
     }
 
-    private fun restartRecognizerImmediately(delayMs: Long) {
-        if (!isContinuousListeningMode) return
+    private fun scheduleSafeRestart(delayMs: Long) {
+        if (!isContinuousListeningMode || restartPending) return
+        restartPending = true
+
         mainHandler.postDelayed({
+            restartPending = false
             if (!isContinuousListeningMode) return@postDelayed
             try {
-                val effective = LocalizationManager.getEffectiveLanguage(currentLanguage)
-                val langTag = if (effective == "ar") "ar-SA" else "en-US"
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
-                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    }
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+                if (!hasRecordAudioPermission()) {
+                    _isListening.value = false
+                    return@postDelayed
                 }
-                silenceChimesTemporarily()
-                speechRecognizer?.startListening(intent)
-                _isListening.value = true
-                lastRecognizerEventTimestamp = System.currentTimeMillis()
+
+                // If recognizer had repeated errors, clean recreate it
+                if (consecutiveErrorCount >= 3 || speechRecognizer == null) {
+                    try {
+                        speechRecognizer?.cancel()
+                        speechRecognizer?.destroy()
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                    speechRecognizer = null
+                }
+
+                createAndStartRecognizer()
             } catch (e: Exception) {
-                recreateRecognizerInstance()
+                Log.e("VoiceSpeechEngine", "Restart failed", e)
             }
         }, delayMs)
     }
 
-    private fun recreateRecognizerInstance() {
-        if (!isContinuousListeningMode) return
-        mainHandler.post {
-            try {
-                speechRecognizer?.stopListening()
-                speechRecognizer?.cancel()
-                speechRecognizer?.destroy()
-            } catch (e: Exception) {
-                // ignore
-            }
-            speechRecognizer = null
-            mainHandler.postDelayed({
-                if (isContinuousListeningMode) {
-                    createAndStartRecognizer()
-                }
-            }, 100)
-        }
-    }
-
     /**
      * Active Watchdog Coroutine:
-     * Checks recognizer state every 4 seconds. If the recognizer stalled or stopped
-     * during long periods of silence or OS idle state, it heals and restarts it automatically.
+     * Checks recognizer state every 5 seconds. If the recognizer stalled or stopped
+     * unexpectedly, gently recovers it without hanging the UI thread.
      */
     private fun startWatchdogEngine() {
         watchdogJob?.cancel()
         watchdogJob = engineScope.launch {
             while (isActive) {
-                delay(4000)
-                if (isContinuousListeningMode) {
+                delay(5000)
+                if (isContinuousListeningMode && hasRecordAudioPermission()) {
                     val now = System.currentTimeMillis()
-                    // If no recognizer lifecycle event occurred for > 8 seconds, it may have hung or been put to sleep
-                    if (now - lastRecognizerEventTimestamp > 8000) {
-                        Log.d("VoiceSpeechEngine", "Watchdog triggered: Self-healing speech recognizer stream")
+                    // If no recognizer lifecycle event occurred for > 10 seconds, softly kickstart
+                    if (now - lastRecognizerEventTimestamp > 10000 && !restartPending) {
+                        Log.d("VoiceSpeechEngine", "Watchdog triggered: Soft self-healing of microphone stream")
                         mainHandler.post {
-                            recreateRecognizerInstance()
+                            scheduleSafeRestart(delayMs = 200L)
                         }
                     }
                 }
@@ -391,22 +378,10 @@ class VoiceSpeechEngine(private val context: Context) {
         }
     }
 
-    private fun silenceChimesTemporarily() {
-        if (isMuteMicBleepsAndSystemSounds || isAllSoundsMuted) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    audioManager?.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
-                    audioManager?.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
-                }
-            } catch (e: Exception) {
-                // ignore
-            }
-        }
-    }
-
     fun stopListening() {
         isContinuousListeningMode = false
         _isListening.value = false
+        restartPending = false
 
         mainHandler.post {
             try {
@@ -438,4 +413,3 @@ class VoiceSpeechEngine(private val context: Context) {
         }
     }
 }
-

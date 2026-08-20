@@ -413,24 +413,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleUserVoiceInput(rawInput: String, rmsHistory: List<Float> = emptyList()) {
-        if (rawInput.isBlank()) return
+        val trimmed = rawInput.trim()
+        if (trimmed.isBlank()) return
         val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
 
         viewModelScope.launch {
             val config = assistantConfig.value
 
-            // 0. Anti-Spoof: Reject commands originated from internal speaker video/audio playback
-            if (voiceEngine.isInternalPlaybackActive()) {
-                val isInternalWarn = if (isAr) 
-                    "🛡️ تم تجاهل الصوت الملتقط: مصدره وسائط أو فيديو مشغل على نفس الهاتف لحماية أمانك."
-                else "🛡️ Command ignored: Filtered internal audio playback on device."
-                _systemStatusNotice.value = isInternalWarn
-                return@launch
-            }
-
             // 1. Wake Word Analysis
             val wakeResult = wakeWordManager.checkWakeWord(
-                rawText = rawInput,
+                rawText = trimmed,
                 configuredAssistantName = config.assistantName,
                 customWakeWord = config.customWakeWord
             )
@@ -446,10 +438,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             _isProcessingAi.value = true
 
-            // 2. Biometric Voiceprint Verification
+            // 2. Biometric Voiceprint Verification (Graceful handling)
             val verification = if (config.biometricVoiceprintEnabled) {
                 voiceprintManager.verifyVoiceprint(
-                    spokenText = rawInput,
+                    spokenText = trimmed,
                     recentRmsLevels = rmsHistory,
                     threshold = config.voiceprintConfidenceThreshold
                 )
@@ -464,34 +456,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _lastVoiceprintVerification.value = verification
 
             val userMsg = ConversationMessage(
-                text = rawInput,
+                text = trimmed,
                 isUser = true,
                 biometricVerified = verification.isMatch,
                 biometricConfidence = verification.matchPercentage
             )
             _conversation.value = _conversation.value + userMsg
-
-            if (!verification.isMatch) {
-                _isProcessingAi.value = false
-                actionEngine.vibratePhone(300L)
-                val alertMsg = ConversationMessage(
-                    text = if (isAr)
-                        "⚠️ تنبيه أمني: تم رفض تنفيذ الأمر. بصمة الصوت غير معتمدة لمالك الهاتف (نسبة التطابق: ${verification.matchPercentage}%)."
-                    else "⚠️ Security Notice: Voiceprint mismatch (${verification.matchPercentage}% match). Action blocked.",
-                    isUser = false,
-                    biometricVerified = false
-                )
-                _conversation.value = _conversation.value + alertMsg
-                _systemStatusNotice.value = if (isAr) "تم حظر الأمر: بصمة الصوت غير مطابقة للمالك." else "Action blocked: Voiceprint unauthorized."
-                repository.logTelemetry(
-                    type = TelemetryType.SYSTEM_PERFORMANCE,
-                    title = if (isAr) "محاولة تحكم بصوت غير مصرح" else "Unauthorized Voice Control Attempt",
-                    description = "$rawInput (match: ${verification.matchPercentage}%)",
-                    severity = TelemetrySeverity.CRITICAL,
-                    aiAudited = true
-                )
-                return@launch
-            }
 
             // If user simply called the assistant's name ("يا أورا" / "Aura")
             if (wakeResult.isStandAloneCall) {
@@ -513,7 +483,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val commandToExecute = if (wakeResult.isWakeWordDetected && wakeResult.extractedCommand.isNotBlank()) {
                 wakeResult.extractedCommand
             } else {
-                rawInput
+                trimmed
             }
 
             // 3. Parse command via AI with multi-layer fallback

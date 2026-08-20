@@ -645,6 +645,56 @@ fun VoiceAssistantScreen(
 
         Spacer(modifier = Modifier.height(6.dp))
 
+        // Quick Suggestion Chips Row for Instant Testing
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            val suggestions = if (isAr) listOf(
+                "🔦 شغل الكشاف",
+                "📷 افتح الكاميرا",
+                "🛡️ فحص الأمان",
+                "📞 اتصل بمحمد",
+                "📘 انشر بوست فيسبوك",
+                "🏠 الشاشة الرئيسية",
+                "🔙 رجوع للخلف",
+                "🔍 ابحث في جوجل"
+            ) else listOf(
+                "🔦 Flashlight",
+                "📷 Open Camera",
+                "🛡️ Security Scan",
+                "📞 Call Contact",
+                "📘 Post Facebook",
+                "🏠 Home Screen",
+                "🔙 Go Back",
+                "🔍 Web Search"
+            )
+
+            suggestions.forEach { prompt ->
+                Surface(
+                    onClick = {
+                        val cleanCommand = prompt.substringAfter(" ").trim()
+                        viewModel.handleUserVoiceInput(cleanCommand)
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    color = PolishSurfaceElevated,
+                    border = BorderStroke(1.dp, PolishSurfaceBorder)
+                ) {
+                    Text(
+                        text = prompt,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PolishTextSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
         // ==========================================
         // 5. UNIFIED INPUT & MIC DOCK BAR
         // ==========================================
