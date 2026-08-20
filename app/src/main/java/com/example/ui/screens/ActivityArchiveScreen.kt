@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -53,6 +55,7 @@ import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishPrimary
 import com.example.ui.theme.PolishPrimaryContainer
 import com.example.ui.theme.PolishSecondaryContainer
+import com.example.ui.theme.PolishSuccess
 import com.example.ui.theme.PolishSurfaceBorder
 import com.example.ui.theme.PolishSurfaceElevated
 import com.example.ui.theme.PolishTextMuted
@@ -70,19 +73,22 @@ fun ActivityArchiveScreen(
     val selectedFilter by viewModel.selectedLogFilter.collectAsStateWithLifecycle()
     val isAuditing by viewModel.isProcessingAi.collectAsStateWithLifecycle()
     val appLang by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val lastBgAction by viewModel.lastBackgroundStatus.collectAsStateWithLifecycle()
+    val isBackgroundActive by viewModel.isBackgroundServiceActive.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
 
     val filteredLogs = if (selectedFilter == null) logs else logs.filter { it.type == selectedFilter }
+    val autonomousActionsCount = logs.count { it.aiAudited || it.type == TelemetryType.AI_INFERENCE || it.title.contains("خلفي") || it.title.contains("تلقائي") || it.title.contains("تنفيذ") }
 
     val filterOptions = listOf(
         Pair(s("الكل", "All"), null),
+        Pair(s("الأفعال الذاتية 🤖", "Autonomous 🤖"), TelemetryType.AI_INFERENCE),
         Pair(s("الأوامر الصوتية", "Voice"), TelemetryType.VOICE_COMMAND),
         Pair(s("الشبكة والاتصالات", "Network"), TelemetryType.NETWORK_TRAFFIC),
         Pair(s("البطارية والطاقة", "Battery"), TelemetryType.BATTERY_POWER),
         Pair(s("الأداء والذاكرة", "System"), TelemetryType.SYSTEM_PERFORMANCE),
-        Pair(s("تدقيق الذكاء الاصطناعي", "AI Audit"), TelemetryType.AI_INFERENCE),
         Pair(s("حركات اللمس", "Touch"), TelemetryType.TOUCH_GESTURE)
     )
 
@@ -129,13 +135,13 @@ fun ActivityArchiveScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = s("قاعدة بيانات وتدقيق الهاتف", "System Audit & Archive"),
+                                    text = s("سجل الإجراءات وتدقيق النظام", "Autonomous Action Log & Audit"),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PolishTextPrimary
                                 )
                                 Text(
-                                    text = s("أرشفة وتحليل المدخلات وسلوكيات الاستخدام", "Archive and analysis of system inputs"),
+                                    text = s("مراجعة ما قام به المساعد أثناء العمل بالخلفية", "Review AI actions executed in background"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = PolishTextSecondary,
                                     fontSize = 11.sp
@@ -168,30 +174,62 @@ fun ActivityArchiveScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Background Autonomous Status Card
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = PolishSecondaryContainer,
-                        border = BorderStroke(1.dp, PolishSurfaceBorder)
+                        color = if (isBackgroundActive) Color(0xFF10B981).copy(alpha = 0.12f) else PolishSecondaryContainer,
+                        border = BorderStroke(1.dp, if (isBackgroundActive) Color(0xFF10B981).copy(alpha = 0.35f) else PolishSurfaceBorder)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = PolishPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = s("حماية موارد الهاتف: يتم تدقيق البيانات فور تدفقها وتطهير السجلات القديمة تلقائياً دون استهلاك الذاكرة أو طاقة المعالج.", "Resource Guard: Telemetry streams are processed in real-time with zero overhead."),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PolishTextPrimary,
-                                fontSize = 11.sp
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.SmartToy,
+                                        contentDescription = null,
+                                        tint = if (isBackgroundActive) Color(0xFF10B981) else PolishPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = s("إجراءات المساعد الذاتية بالخلفية: $autonomousActionsCount إجراء", "AI Background Actions: $autonomousActionsCount executed"),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isBackgroundActive) Color(0xFF10B981) else PolishTextPrimary,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isBackgroundActive) Color(0xFF10B981).copy(alpha = 0.2f) else PolishSurfaceElevated
+                                ) {
+                                    Text(
+                                        text = if (isBackgroundActive) s("الخدمة تعمل 24/7", "24/7 Active") else s("الخدمة متوقفة", "Service Idle"),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isBackgroundActive) Color(0xFF10B981) else PolishTextSecondary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            if (!lastBgAction.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = s("آخر نشاط بالخلفية: ", "Last background activity: ") + lastBgAction,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = PolishTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -237,7 +275,7 @@ fun ActivityArchiveScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = s("سجل أحداث ومدخلات الهاتف", "System Event Stream") + " (${filteredLogs.size})",
+                        text = s("سجل الأحداث والعمليات الذاتية", "Autonomous Activity & Event Stream") + " (${filteredLogs.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PolishTextPrimary

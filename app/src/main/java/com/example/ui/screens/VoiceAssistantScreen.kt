@@ -2,6 +2,11 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -135,6 +140,17 @@ fun VoiceAssistantScreen(
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
 
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_trans")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+
     LaunchedEffect(conversation.size) {
         if (conversation.isNotEmpty()) {
             listState.animateScrollToItem(conversation.size - 1)
@@ -183,17 +199,21 @@ fun VoiceAssistantScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(12.dp)
                                 .clip(CircleShape)
-                                .background(if (isBackgroundActive && isListening) Color(0xFF10B981) else Color(0xFFF59E0B))
+                                .background(
+                                    if (isBackgroundActive && isListening) Color(0xFF10B981).copy(alpha = pulseAlpha)
+                                    else if (isBackgroundActive) Color(0xFF10B981)
+                                    else Color(0xFFF59E0B)
+                                )
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
                                 text = if (isBackgroundActive) {
-                                    s("المساعد جاهز دائماً في الخلفية 🟢", "Always-On Assistant Active 🟢")
+                                    s("المساعد نشط ويعمل بالخلفية 🟢", "AI Assistant: Active & Listening 🟢")
                                 } else {
-                                    s("وضع الاستماع المحلي فقط", "In-App Listening Only")
+                                    s("وضع الاستماع المحلي فقط 🟡", "In-App Listening Only 🟡")
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
@@ -204,7 +224,7 @@ fun VoiceAssistantScreen(
                                 text = if (isBackgroundActive) {
                                     s("يستمع وينفذ الأوامر دون لمس الشاشة 24/7", "Listens & executes hands-free 24/7")
                                 } else {
-                                    s("اضغط لتشغيل الاستماع في الخلفية", "Tap to keep active in background")
+                                    s("اضغط لتشغيل الاستماع الدائم بالخلفية", "Tap to enable 24/7 persistent background")
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PolishTextSecondary,

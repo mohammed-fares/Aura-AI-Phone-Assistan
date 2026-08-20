@@ -24,6 +24,13 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 val config = app?.repository?.config?.firstOrNull()
                 if (config == null || config.backgroundServiceEnabled) {
                     AssistantForegroundService.startService(context)
+                    app?.repository?.logTelemetry(
+                        type = com.example.data.local.entity.TelemetryType.SYSTEM_PERFORMANCE,
+                        title = "تشغيل تلقائي عند إقلاع الهاتف (Auto-Boot)",
+                        description = "تم إطلاق الخدمة الخلفية وبدء الاستماع الذاتي فور اكتمال إعادة تشغيل النظام بنجاح ⚡",
+                        severity = com.example.data.local.entity.TelemetrySeverity.OPTIMAL,
+                        aiAudited = true
+                    )
                 }
             }
         }
