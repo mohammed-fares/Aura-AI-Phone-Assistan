@@ -294,9 +294,12 @@ class AssistantForegroundService : Service() {
                         recognizedText
                     }
 
+                    // Resolve multi-dialect synonyms & learned vocabulary mapping
+                    val resolvedCommand = auraApp.semanticSynonymManager.resolve(commandToExecute)
+
                     // Process command via AI
                     try {
-                        val parsed = repository.processVoiceCommand(commandToExecute)
+                        val parsed = repository.processVoiceCommand(resolvedCommand)
                         val status = "تم تنفيذ في الخلفية: ${parsed.responseSpeechText}"
                         _lastBackgroundActionStatus.value = status
                         updateNotification(status)

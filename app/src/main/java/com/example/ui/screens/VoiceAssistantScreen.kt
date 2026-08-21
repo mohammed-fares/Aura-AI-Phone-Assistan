@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOn
@@ -101,6 +102,7 @@ import com.example.ui.ConversationMessage
 import com.example.ui.MainViewModel
 import com.example.ui.components.AutonomousExecutionVisualizer
 import com.example.ui.components.NeuralOrbVisualizer
+import com.example.ui.components.PendingCommandReviewCard
 import com.example.ui.theme.PolishBackground
 import com.example.ui.theme.PolishGlow
 import com.example.ui.theme.PolishOnPrimaryContainer
@@ -143,6 +145,8 @@ fun VoiceAssistantScreen(
     val isUsingFallback by viewModel.voiceEngine.isUsingFallbackAcousticEngine.collectAsStateWithLifecycle()
     val activeExecutionPlan by viewModel.activeExecutionPlan.collectAsStateWithLifecycle()
     val isAccessibilityConnected by viewModel.isAccessibilityConnected.collectAsStateWithLifecycle()
+    val pendingCommandReview by viewModel.pendingCommandReview.collectAsStateWithLifecycle()
+    val requireReviewBeforeExecution by viewModel.requireReviewBeforeExecution.collectAsStateWithLifecycle()
 
     val isAr = LocalizationManager.getEffectiveLanguage(appLang) == "ar"
     fun s(ar: String, en: String): String = if (isAr) ar else en
@@ -393,6 +397,34 @@ fun VoiceAssistantScreen(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (config.muteAllAppSounds) Color(0xFFEF4444) else PolishTextSecondary
+                            )
+                        }
+                    }
+
+                    // Intent Review Mode Pill (Human-in-the-loop)
+                    Surface(
+                        onClick = { viewModel.toggleRequireReviewBeforeExecution() },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (requireReviewBeforeExecution) PolishPrimary.copy(alpha = 0.15f) else PolishSurfaceElevated,
+                        border = BorderStroke(1.dp, if (requireReviewBeforeExecution) PolishPrimary.copy(alpha = 0.4f) else PolishSurfaceBorder),
+                        modifier = Modifier.testTag("pill_intent_review_mode_toggle")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = if (requireReviewBeforeExecution) PolishPrimary else PolishTextSecondary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (requireReviewBeforeExecution) s("مراجعة الأوامر 📝", "Review Mode 📝") else s("تنفيذ فوري ⚡", "Instant Mode ⚡"),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (requireReviewBeforeExecution) PolishPrimary else PolishTextSecondary
                             )
                         }
                     }
@@ -675,6 +707,23 @@ fun VoiceAssistantScreen(
             }
         }
 
+        // Human-in-the-loop Pending Command Review & Verification Card
+        pendingCommandReview?.let { review ->
+            Spacer(modifier = Modifier.height(6.dp))
+            PendingCommandReviewCard(
+                review = review,
+                isArabic = isAr,
+                onPayloadChange = { viewModel.updatePendingCommandPayload(it) },
+                onActionTypeChange = { viewModel.updatePendingCommandActionType(it) },
+                onConfirmExecute = { viewModel.confirmAndExecutePendingCommand() },
+                onCancel = { viewModel.cancelPendingCommand() },
+                onTeachAsSynonym = { word, canonical, action ->
+                    viewModel.learnNewSynonym(word, canonical, action)
+                    viewModel.confirmAndExecutePendingCommand()
+                }
+            )
+        }
+
         // Live Autonomous Phone Execution Visualizer
         activeExecutionPlan?.let { plan ->
             Spacer(modifier = Modifier.height(6.dp))
@@ -748,6 +797,9 @@ fun VoiceAssistantScreen(
                         isAr = isAr,
                         onExecuteAgain = { action, payload ->
                             viewModel.executeAction(action, payload)
+                        },
+                        onEditReview = { messageToReview ->
+                            viewModel.openReviewForMessage(messageToReview)
                         }
                     )
                 }
@@ -1008,7 +1060,8 @@ fun QuickPhoneActionButton(
 fun ConversationBubble(
     message: ConversationMessage,
     isAr: Boolean,
-    onExecuteAgain: (ActionType, String?) -> Unit
+    onExecuteAgain: (ActionType, String?) -> Unit,
+    onEditReview: (ConversationMessage) -> Unit = {}
 ) {
     val isUser = message.isUser
     Row(
@@ -1092,29 +1145,48 @@ fun ConversationBubble(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isAr) "تم التنفيذ: ${message.actionType.name}" else "Executed: ${message.actionType.name}",
+                                    text = if (isAr) "الأمر: ${message.actionType.name}" else "Intent: ${message.actionType.name}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = PolishSuccess,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 10.sp
                                 )
                             }
-                            Button(
-                                onClick = { onExecuteAgain(message.actionType, message.actionPayload) },
-                                shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                    horizontal = 6.dp,
-                                    vertical = 2.dp
-                                ),
-                                modifier = Modifier.height(24.dp)
-                            ) {
-                                Text(
-                                    text = if (isAr) "إعادة" else "Retry",
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(
+                                    onClick = { onEditReview(message) },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary.copy(alpha = 0.85f)),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 6.dp,
+                                        vertical = 2.dp
+                                    ),
+                                    modifier = Modifier.height(24.dp)
+                                ) {
+                                    Text(
+                                        text = if (isAr) "تعديل 📝" else "Edit 📝",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Button(
+                                    onClick = { onExecuteAgain(message.actionType, message.actionPayload) },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 6.dp,
+                                        vertical = 2.dp
+                                    ),
+                                    modifier = Modifier.height(24.dp)
+                                ) {
+                                    Text(
+                                        text = if (isAr) "إعادة ⚡" else "Retry ⚡",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }

@@ -193,6 +193,12 @@ class SemanticSynonymManager(private val context: Context) {
         learnSynonym(phrase = phrase, canonical = actionType.name, actionType = actionType, payload = payload)
     }
 
+    fun removeLearnedSynonym(phrase: String) {
+        val current = _learnedSynonyms.value.toMutableList()
+        current.removeAll { it.triggerPhrase.equals(phrase.trim(), ignoreCase = true) }
+        persistSynonyms(current)
+    }
+
     private fun inferActionFromCanonical(canonical: String): ActionType {
         val lower = canonical.lowercase().trim()
         return when {
@@ -253,10 +259,92 @@ class SemanticSynonymManager(private val context: Context) {
         return resolved
     }
 
-    fun removeLearnedSynonym(phrase: String) {
-        val current = _learnedSynonyms.value.toMutableList()
-        current.removeAll { it.triggerPhrase.equals(phrase.trim(), ignoreCase = true) }
-        persistSynonyms(current)
+    /**
+     * Vector / N-gram Similarity Match Result
+     */
+    data class SynonymMatchResult(
+        val matchedCluster: SynonymCluster?,
+        val matchedSynonymWord: String,
+        val targetAction: ActionType,
+        val similarityScore: Float,
+        val isLearnedCustom: Boolean = false
+    )
+
+    /**
+     * Finds the closest synonym cluster using vector-like character n-gram cosine similarity.
+     * Groups synonymous commands (e.g. 'close', 'off', 'exit', 'shut', 'سكر', 'اطفي', 'بند')
+     * into a unified ActionType trigger.
+     */
+    fun findVectorSynonymMatch(rawQuery: String): SynonymMatchResult? {
+        val clean = rawQuery.trim().lowercase()
+        if (clean.isBlank()) return null
+
+        // 1. Check custom learned synonyms first (Priority)
+        for (learned in _learnedSynonyms.value) {
+            val score = calculateVectorSimilarity(clean, learned.triggerPhrase)
+            if (score >= 0.70f || clean.contains(learned.triggerPhrase)) {
+                val matchedClust = builtInClusters.firstOrNull { it.representativeAction == learned.actionType }
+                return SynonymMatchResult(
+                    matchedCluster = matchedClust,
+                    matchedSynonymWord = learned.triggerPhrase,
+                    targetAction = learned.actionType,
+                    similarityScore = if (clean.contains(learned.triggerPhrase)) 1.0f else score,
+                    isLearnedCustom = true
+                )
+            }
+        }
+
+        // 2. Vector-based cluster matching across all built-in clusters
+        var bestMatch: SynonymMatchResult? = null
+        var highestScore = 0f
+
+        for (cluster in builtInClusters) {
+            for (synonym in cluster.synonymWords) {
+                val score = calculateVectorSimilarity(clean, synonym.lowercase())
+                val isExactSubstring = clean.contains(synonym.lowercase())
+                val effectiveScore = if (isExactSubstring) 0.95f else score
+
+                if (effectiveScore > highestScore && effectiveScore >= 0.60f) {
+                    highestScore = effectiveScore
+                    bestMatch = SynonymMatchResult(
+                        matchedCluster = cluster,
+                        matchedSynonymWord = synonym,
+                        targetAction = cluster.representativeAction,
+                        similarityScore = effectiveScore,
+                        isLearnedCustom = false
+                    )
+                }
+            }
+        }
+
+        return bestMatch
+    }
+
+    /**
+     * Vector similarity calculation using 2-gram and 3-gram character frequency vectors (Cosine / Dice Coefficient).
+     */
+    fun calculateVectorSimilarity(s1: String, s2: String): Float {
+        if (s1.equals(s2, ignoreCase = true)) return 1.0f
+        if (s1.contains(s2, ignoreCase = true) || s2.contains(s1, ignoreCase = true)) return 0.90f
+
+        val grams1 = extractNGrams(s1, 2) + extractNGrams(s1, 3)
+        val grams2 = extractNGrams(s2, 2) + extractNGrams(s2, 3)
+
+        if (grams1.isEmpty() || grams2.isEmpty()) return 0f
+
+        val intersection = grams1.count { grams2.contains(it) }
+        val total = grams1.size + grams2.size
+        return (2.0f * intersection) / total
+    }
+
+    private fun extractNGrams(str: String, n: Int): List<String> {
+        val list = mutableListOf<String>()
+        val clean = str.replace("\\s+".toRegex(), "")
+        if (clean.length < n) return list
+        for (i in 0..clean.length - n) {
+            list.add(clean.substring(i, i + n))
+        }
+        return list
     }
 
     /**

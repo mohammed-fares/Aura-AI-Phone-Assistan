@@ -176,6 +176,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeExecutionPlan = MutableStateFlow<LiveExecutionPlan?>(null)
     val activeExecutionPlan: StateFlow<LiveExecutionPlan?> = _activeExecutionPlan.asStateFlow()
 
+    // Command Review & Manual Intent Verification State (Human-in-the-loop)
+    private val _pendingCommandReview = MutableStateFlow<PendingCommandReview?>(null)
+    val pendingCommandReview: StateFlow<PendingCommandReview?> = _pendingCommandReview.asStateFlow()
+
+    private val _requireReviewBeforeExecution = MutableStateFlow<Boolean>(true)
+    val requireReviewBeforeExecution: StateFlow<Boolean> = _requireReviewBeforeExecution.asStateFlow()
+
     // Semantic Synonyms & Multi-Dialect AI Engine
     val semanticSynonymManager = auraApp.semanticSynonymManager
     val learnedSynonyms: StateFlow<List<LearnedSynonym>> = semanticSynonymManager.learnedSynonyms
@@ -497,13 +504,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 trimmed
             }
 
-            // 3. Resolve multi-dialect synonyms & learned vocabulary
+            // 3. Resolve multi-dialect synonyms & learned vocabulary with Vector Similarity
+            val vectorMatch = semanticSynonymManager.findVectorSynonymMatch(commandToExecute)
             val resolvedCommand = semanticSynonymManager.resolve(commandToExecute)
 
             // 4. Parse command via AI with multi-layer fallback
             try {
                 var parsed = repository.processVoiceCommand(resolvedCommand)
-                if (parsed.actionType == null) {
+                if (parsed.actionType == null && vectorMatch != null) {
+                    parsed = parsed.copy(
+                        actionType = vectorMatch.targetAction,
+                        actionPayload = if (parsed.actionPayload.isNullOrBlank()) commandToExecute else parsed.actionPayload,
+                        responseSpeechText = "تم فهم الأمر وتصنيفه تلقائياً: ${vectorMatch.targetAction}"
+                    )
+                } else if (parsed.actionType == null) {
                     val fallback = auraApp.geminiService.fallbackLocalInterpreter(resolvedCommand, config.assistantName)
                     if (fallback.actionType != null) {
                         parsed = fallback
@@ -529,14 +543,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // 4. Autonomous Execution on Phone
+                // 5. Human-in-the-loop Review or Autonomous Execution
                 parsed.actionType?.let { action ->
-                    if (action == ActionType.SYSTEM_SECURITY_SCAN) {
-                        startFullSecurityScan()
-                    } else if (action == ActionType.LOCAL_NETWORK_SCAN) {
-                        refreshLocalNetworkTelemetry()
+                    if (_requireReviewBeforeExecution.value) {
+                        _pendingCommandReview.value = PendingCommandReview(
+                            rawSpokenText = commandToExecute,
+                            matchedSynonymWord = vectorMatch?.matchedSynonymWord,
+                            matchedClusterTitle = vectorMatch?.matchedCluster?.categoryNameAr,
+                            initialActionType = action,
+                            editableActionType = action,
+                            editablePayload = parsed.actionPayload ?: "",
+                            aiResponseText = parsed.responseSpeechText,
+                            similarityScore = vectorMatch?.similarityScore ?: 0.95f,
+                            isCustomSynonym = vectorMatch?.isLearnedCustom ?: false
+                        )
+                    } else {
+                        if (action == ActionType.SYSTEM_SECURITY_SCAN) {
+                            startFullSecurityScan()
+                        } else if (action == ActionType.LOCAL_NETWORK_SCAN) {
+                            refreshLocalNetworkTelemetry()
+                        }
+                        executeAction(action, parsed.actionPayload)
                     }
-                    executeAction(action, parsed.actionPayload)
                 }
             } catch (e: Exception) {
                 _systemStatusNotice.value = "Error: ${e.message}"
@@ -544,6 +572,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isProcessingAi.value = false
             }
         }
+    }
+
+    fun toggleRequireReviewBeforeExecution() {
+        val newVal = !_requireReviewBeforeExecution.value
+        _requireReviewBeforeExecution.value = newVal
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (newVal) {
+            if (isAr) "تم تفعيل وضع مراجعة وتعديل الأوامر قبل التنفيذ 📝" else "Review before execution enabled 📝"
+        } else {
+            if (isAr) "تم تفعيل التنفيذ الفوري المباشر للأوامر ⚡" else "Direct instant execution enabled ⚡"
+        }
+    }
+
+    fun updatePendingCommandPayload(newPayload: String) {
+        _pendingCommandReview.value = _pendingCommandReview.value?.copy(editablePayload = newPayload)
+    }
+
+    fun updatePendingCommandActionType(newAction: ActionType) {
+        _pendingCommandReview.value = _pendingCommandReview.value?.copy(editableActionType = newAction)
+    }
+
+    fun cancelPendingCommand() {
+        _pendingCommandReview.value = null
+    }
+
+    fun confirmAndExecutePendingCommand() {
+        val pending = _pendingCommandReview.value ?: return
+        _pendingCommandReview.value = null
+        if (pending.editableActionType == ActionType.SYSTEM_SECURITY_SCAN) {
+            startFullSecurityScan()
+        } else if (pending.editableActionType == ActionType.LOCAL_NETWORK_SCAN) {
+            refreshLocalNetworkTelemetry()
+        }
+        executeAction(pending.editableActionType, pending.editablePayload.ifBlank { null })
+    }
+
+    fun openReviewForMessage(message: ConversationMessage) {
+        val action = message.actionType ?: ActionType.OPEN_APP
+        _pendingCommandReview.value = PendingCommandReview(
+            rawSpokenText = message.text,
+            matchedSynonymWord = null,
+            matchedClusterTitle = null,
+            initialActionType = action,
+            editableActionType = action,
+            editablePayload = message.actionPayload ?: "",
+            aiResponseText = message.text,
+            similarityScore = 1.0f
+        )
+    }
+
+    fun openReviewForRawCommand(rawText: String, defaultAction: ActionType = ActionType.OPEN_APP, defaultPayload: String = "") {
+        val vectorMatch = semanticSynonymManager.findVectorSynonymMatch(rawText)
+        val action = vectorMatch?.targetAction ?: defaultAction
+        _pendingCommandReview.value = PendingCommandReview(
+            rawSpokenText = rawText,
+            matchedSynonymWord = vectorMatch?.matchedSynonymWord,
+            matchedClusterTitle = vectorMatch?.matchedCluster?.categoryNameAr,
+            initialActionType = action,
+            editableActionType = action,
+            editablePayload = defaultPayload,
+            aiResponseText = "أمر جاهز للمراجعة والتعديل قبل إرساله للهاتف",
+            similarityScore = vectorMatch?.similarityScore ?: 0.90f,
+            isCustomSynonym = vectorMatch?.isLearnedCustom ?: false
+        )
     }
 
     fun executeAction(actionType: ActionType, payload: String? = null, shortcutId: Long? = null) {
@@ -910,3 +1002,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         voiceEngine.destroy()
     }
 }
+
+data class PendingCommandReview(
+    val rawSpokenText: String,
+    val matchedSynonymWord: String? = null,
+    val matchedClusterTitle: String? = null,
+    val initialActionType: ActionType,
+    val editableActionType: ActionType,
+    val editablePayload: String,
+    val aiResponseText: String,
+    val similarityScore: Float = 0.95f,
+    val isCustomSynonym: Boolean = false
+)
