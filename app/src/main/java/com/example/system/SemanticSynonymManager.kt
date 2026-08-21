@@ -12,10 +12,13 @@ import org.json.JSONObject
 
 data class CustomSynonymEntry(
     val triggerPhrase: String,
+    val canonicalMeaning: String = "",
     val actionType: ActionType,
     val payload: String? = null,
     val addedTimestamp: Long = System.currentTimeMillis()
 )
+
+typealias LearnedSynonym = CustomSynonymEntry
 
 data class SynonymCluster(
     val categoryNameAr: String,
@@ -117,13 +120,15 @@ class SemanticSynonymManager(private val context: Context) {
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 val phrase = obj.getString("phrase")
-                val actionTypeStr = obj.getString("actionType")
+                val canonical = obj.optString("canonical", "")
+                val actionTypeStr = obj.optString("actionType", ActionType.CLOSE_APP.name)
                 val payload = obj.optString("payload").takeIf { it.isNotBlank() && it != "null" }
                 val time = obj.optLong("timestamp", System.currentTimeMillis())
                 try {
                     list.add(
                         CustomSynonymEntry(
                             triggerPhrase = phrase,
+                            canonicalMeaning = canonical,
                             actionType = ActionType.valueOf(actionTypeStr),
                             payload = payload,
                             addedTimestamp = time
@@ -144,6 +149,7 @@ class SemanticSynonymManager(private val context: Context) {
         for (item in list) {
             val obj = JSONObject().apply {
                 put("phrase", item.triggerPhrase)
+                put("canonical", item.canonicalMeaning)
                 put("actionType", item.actionType.name)
                 put("payload", item.payload ?: "")
                 put("timestamp", item.addedTimestamp)
@@ -156,23 +162,95 @@ class SemanticSynonymManager(private val context: Context) {
 
     /**
      * Learns or overrides a user concept / dialect expression.
-     * When user teaches: "اطفي الكشاف" -> ActionType.TOGGLE_FLASHLIGHT
+     * When user teaches: "اطفي" -> "اغلق" or ActionType.CLOSE_APP
      */
-    fun learnSynonym(phrase: String, actionType: ActionType, payload: String? = null) {
+    fun learnSynonym(
+        phrase: String,
+        canonical: String = "",
+        actionType: ActionType? = null,
+        payload: String? = null
+    ) {
         val cleanPhrase = phrase.trim().lowercase()
         if (cleanPhrase.isBlank()) return
+
+        val resolvedAction = actionType ?: inferActionFromCanonical(canonical)
 
         val current = _learnedSynonyms.value.toMutableList()
         current.removeAll { it.triggerPhrase.equals(cleanPhrase, ignoreCase = true) }
         current.add(
             CustomSynonymEntry(
                 triggerPhrase = cleanPhrase,
-                actionType = actionType,
+                canonicalMeaning = canonical.trim(),
+                actionType = resolvedAction,
                 payload = payload?.trim()?.takeIf { it.isNotBlank() },
                 addedTimestamp = System.currentTimeMillis()
             )
         )
         persistSynonyms(current)
+    }
+
+    fun learnSynonym(phrase: String, actionType: ActionType, payload: String? = null) {
+        learnSynonym(phrase = phrase, canonical = actionType.name, actionType = actionType, payload = payload)
+    }
+
+    private fun inferActionFromCanonical(canonical: String): ActionType {
+        val lower = canonical.lowercase().trim()
+        return when {
+            lower.containsAny("اغلق", "إغلاق", "اطفي", "طفي", "قفل", "سكر", "بند", "close", "shut", "stop") -> ActionType.CLOSE_APP
+            lower.containsAny("افتح", "فتح", "شغل", "تشغيل", "ولع", "open", "launch", "start") -> ActionType.OPEN_APP
+            lower.containsAny("اتصل", "اتصال", "كلم", "رن", "خابر", "call", "dial") -> ActionType.CALL_CONTACT
+            lower.containsAny("اقرأ الشاشة", "اقرا الشاشة", "شوف الشاشة", "قراءة الشاشة", "read screen") -> ActionType.READ_SCREEN_TEXT
+            lower.containsAny("لخص", "تلخيص", "summarize") -> ActionType.SUMMARIZE_SCREEN
+            lower.containsAny("كشاف", "فلاش", "flashlight") -> ActionType.TOGGLE_FLASHLIGHT
+            lower.containsAny("ارجع", "رجوع", "للخلف", "back") -> ActionType.GLOBAL_BACK
+            lower.containsAny("الرئيسية", "home") -> ActionType.RETURN_HOME
+            lower.containsAny("الغي", "إنهاء", "انهي", "end") -> ActionType.END_CALL
+            else -> ActionType.CLOSE_APP
+        }
+    }
+
+    /**
+     * Resolves dialect words within a sentence to their canonical standard form.
+     */
+    fun resolve(rawInput: String): String {
+        var resolved = rawInput.trim()
+        val lower = resolved.lowercase()
+
+        // 1. Check custom learned synonyms
+        for (entry in _learnedSynonyms.value) {
+            if (entry.canonicalMeaning.isNotBlank() && lower.contains(entry.triggerPhrase)) {
+                resolved = resolved.replace(Regex("(?i)${Regex.escape(entry.triggerPhrase)}"), entry.canonicalMeaning)
+            }
+        }
+
+        // 2. Built-in dialect standardizations
+        val dialectReplacements = mapOf(
+            "اطفي" to "اغلق",
+            "طفي" to "اغلق",
+            "طفيها" to "اغلق",
+            "سكر" to "اغلق",
+            "سكره" to "اغلق",
+            "بند" to "اغلق",
+            "بندها" to "اغلق",
+            "فركش" to "اغلق",
+            "ولع" to "شغل",
+            "ضوّي" to "شغل",
+            "شعل" to "شغل",
+            "رن على" to "اتصل ب",
+            "دق على" to "اتصل ب",
+            "خابر" to "اتصل ب",
+            "شوف الشاشة" to "اقرأ الشاشة",
+            "ايش في بالشاشة" to "اقرأ الشاشة",
+            "شو في بالشاشة" to "اقرأ الشاشة"
+        )
+
+        for ((dialect, standard) in dialectReplacements) {
+            if (resolved.contains(dialect, ignoreCase = true)) {
+                resolved = resolved.replace(Regex("(?i)${Regex.escape(dialect)}"), standard)
+            }
+        }
+
+        return resolved
     }
 
     fun removeLearnedSynonym(phrase: String) {

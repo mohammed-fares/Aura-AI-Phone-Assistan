@@ -829,4 +829,51 @@ class AuraAccessibilityService : AccessibilityService() {
         }
         return null
     }
+
+    /**
+     * Extracts all visible text from the current active window/screen for Screen Perception & AI Understanding.
+     */
+    fun extractVisibleScreenText(): String {
+        val root = rootInActiveWindow ?: return "لا توجد نافذة نشطة حالياً للقراءة."
+        val textCollector = mutableListOf<String>()
+        collectAllNodeText(root, textCollector)
+        val combined = textCollector.filter { it.isNotBlank() }.distinct().joinToString(" \n ")
+        return combined.ifBlank { "لم يتم العثور على نصوص مقروءة على الشاشة الحالية." }
+    }
+
+    private fun collectAllNodeText(node: AccessibilityNodeInfo, list: MutableList<String>) {
+        val text = node.text?.toString()?.trim()
+        if (!text.isNullOrBlank()) {
+            list.add(text)
+        }
+        val desc = node.contentDescription?.toString()?.trim()
+        if (!desc.isNullOrBlank() && desc != text) {
+            list.add(desc)
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectAllNodeText(child, list)
+        }
+    }
+
+    /**
+     * Types text directly into the focused or first editable text field on screen.
+     */
+    fun typeTextInActiveField(text: String, onFeedback: ((String) -> Unit)? = null) {
+        val root = rootInActiveWindow
+        if (root != null) {
+            val editNode = findFirstEditableNode(root)
+            if (editNode != null) {
+                val args = Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                }
+                val success = editNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                if (success) {
+                    onFeedback?.invoke("تمت كتابة النص على الشاشة بنجاح ✍️")
+                    return
+                }
+            }
+        }
+        activeTask = AutonomousTask.TypeText(text, onFeedback ?: {})
+    }
 }

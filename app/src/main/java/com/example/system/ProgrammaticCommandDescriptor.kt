@@ -351,6 +351,58 @@ object ProgrammaticCommandDescriptor {
                 )
             }
 
+            ActionType.READ_SCREEN_TEXT -> {
+                ProgrammaticCommand(
+                    actionType = actionType,
+                    payload = payload,
+                    kotlinCodeSnippet = """
+                        // Accessibility Screen Text Extraction & TTS
+                        val screenText = AuraAccessibilityService.instance?.extractVisibleScreenText()
+                        voiceEngine.speak(screenText ?: "لا توجد نصوص مقروءة")
+                    """.trimIndent(),
+                    intentAction = "AuraAccessibilityService#extractVisibleScreenText",
+                    targetComponent = "AccessibilityNodeInfo Hierarchy Walker",
+                    adbShellCommand = "adb shell uiautomator dump /sdcard/window_dump.xml && adb shell cat /sdcard/window_dump.xml",
+                    executionSummaryAr = "استخراج وقراءة كافة النصوص المعروضة على الشاشة الحالية بصوت ناطق",
+                    executionSummaryEn = "Extract and read all visible on-screen texts aloud"
+                )
+            }
+
+            ActionType.SUMMARIZE_SCREEN -> {
+                ProgrammaticCommand(
+                    actionType = actionType,
+                    payload = payload,
+                    kotlinCodeSnippet = """
+                        // AI Screen Perception & Summarization
+                        val rawText = AuraAccessibilityService.instance?.extractVisibleScreenText()
+                        val summary = geminiService.summarizeScreenContent(rawText)
+                        voiceEngine.speak(summary)
+                    """.trimIndent(),
+                    intentAction = "GeminiService#summarizeScreenContent",
+                    targetComponent = "Gemini Multi-Modal Screen Perception Engine",
+                    adbShellCommand = "adb shell uiautomator dump /sdcard/window_dump.xml",
+                    executionSummaryAr = "تحليل المحتوى المعروض على الشاشة وتلخيصه بالذكاء الاصطناعي",
+                    executionSummaryEn = "Perceive and summarize current screen content with AI"
+                )
+            }
+
+            ActionType.TYPE_ON_SCREEN -> {
+                val textToType = safePayload.ifBlank { "نص مخصص" }
+                ProgrammaticCommand(
+                    actionType = actionType,
+                    payload = payload,
+                    kotlinCodeSnippet = """
+                        // Direct Typing into Active Input Field
+                        AuraAccessibilityService.instance?.typeTextInActiveField("$textToType")
+                    """.trimIndent(),
+                    intentAction = "AccessibilityNodeInfo#ACTION_SET_TEXT",
+                    targetComponent = "Active Focus View / EditText",
+                    adbShellCommand = "adb shell input text \"${textToType.replace(" ", "%s")}\"",
+                    executionSummaryAr = "كتابة النص \"$textToType\" تلقائياً في الحقل النشط على الشاشة",
+                    executionSummaryEn = "Autonomously type text \"$textToType\" into active field"
+                )
+            }
+
             else -> {
                 ProgrammaticCommand(
                     actionType = actionType,

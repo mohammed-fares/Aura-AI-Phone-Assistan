@@ -34,6 +34,7 @@ class AuraApplication : Application() {
     val localNetworkMonitor by lazy { LocalNetworkMonitor(this) }
     val appKnowledgeManager by lazy { AppKnowledgeManager(this, database.installedAppDao()) }
     val wakeWordManager by lazy { WakeWordManager() }
+    val semanticSynonymManager by lazy { com.example.system.SemanticSynonymManager(this) }
 
     override fun onCreate() {
         super.onCreate()

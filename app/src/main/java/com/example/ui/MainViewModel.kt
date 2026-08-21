@@ -14,9 +14,14 @@ import com.example.data.local.entity.TelemetrySeverity
 import com.example.data.local.entity.TelemetryType
 import com.example.data.local.entity.VoiceprintEntity
 import com.example.data.remote.ParsedVoiceAction
+import com.example.service.AuraAccessibilityService
 import com.example.system.DeviceMetrics
+import com.example.system.LearnedSynonym
 import com.example.system.LocalNetworkTelemetry
+import com.example.system.ProgrammaticCommand
+import com.example.system.ProgrammaticCommandDescriptor
 import com.example.system.SecurityScanReport
+import com.example.system.SynonymCluster
 import com.example.system.ThreatItem
 import com.example.system.VoiceprintVerificationResult
 import com.example.util.LocalizationManager
@@ -44,6 +49,7 @@ data class LiveExecutionPlan(
     val commandTitle: String,
     val actionType: ActionType,
     val actionPayload: String? = null,
+    val programmaticCommand: ProgrammaticCommand? = null,
     val steps: List<ExecutionStep>,
     val currentStepIndex: Int = 0,
     val isRunning: Boolean = false,
@@ -169,6 +175,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Autonomous Execution Plan State
     private val _activeExecutionPlan = MutableStateFlow<LiveExecutionPlan?>(null)
     val activeExecutionPlan: StateFlow<LiveExecutionPlan?> = _activeExecutionPlan.asStateFlow()
+
+    // Semantic Synonyms & Multi-Dialect AI Engine
+    val semanticSynonymManager = auraApp.semanticSynonymManager
+    val learnedSynonyms: StateFlow<List<LearnedSynonym>> = semanticSynonymManager.learnedSynonyms
+    val builtInSynonymClusters: List<SynonymCluster> = semanticSynonymManager.builtInClusters
 
     // Permissions List
     private val _permissionsState = MutableStateFlow<List<AppPermissionInfo>>(emptyList())
@@ -486,11 +497,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 trimmed
             }
 
-            // 3. Parse command via AI with multi-layer fallback
+            // 3. Resolve multi-dialect synonyms & learned vocabulary
+            val resolvedCommand = semanticSynonymManager.resolve(commandToExecute)
+
+            // 4. Parse command via AI with multi-layer fallback
             try {
-                var parsed = repository.processVoiceCommand(commandToExecute)
+                var parsed = repository.processVoiceCommand(resolvedCommand)
                 if (parsed.actionType == null) {
-                    val fallback = auraApp.geminiService.fallbackLocalInterpreter(commandToExecute, config.assistantName)
+                    val fallback = auraApp.geminiService.fallbackLocalInterpreter(resolvedCommand, config.assistantName)
                     if (fallback.actionType != null) {
                         parsed = fallback
                     }
@@ -637,16 +651,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ExecutionStep(2, if (isAr) "اكتمال التنفيذ الذاتي" else "Autonomous Execution", if (isAr) "تم إنجاز العملية بنجاح" else "Action completed successfully", "RETURN_HOME")
             )
         }
+        val programmatic = ProgrammaticCommandDescriptor.describe(actionType, payload)
         return LiveExecutionPlan(
             commandTitle = if (isAr) "تنفيذ تلقائي: ${actionType.name}" else "Autonomous Action: ${actionType.name}",
             actionType = actionType,
             actionPayload = payload,
+            programmaticCommand = programmatic,
             steps = steps,
             currentStepIndex = 0,
             isRunning = true,
             isCompleted = false,
             statusMessage = if (isAr) "جاري التنفيذ التلقائي بالنيابة عنك..." else "Executing autonomously on device..."
         )
+    }
+
+    fun updateAndReExecutePlan(newActionType: ActionType, newPayload: String) {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (isAr) "جاري إعادة تنفيذ الأمر بعد التعديل البرمجي ⚙️" else "Re-executing updated programmatic command ⚙️"
+        executeAction(newActionType, newPayload.ifBlank { null })
+    }
+
+    fun learnNewSynonym(phrase: String, canonical: String, actionType: ActionType? = null) {
+        semanticSynonymManager.learnSynonym(phrase, canonical, actionType)
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (isAr) "تم تدريب الذكاء الاصطناعي على المرادف: \"$phrase\" 🧠" else "Learned new synonym: \"$phrase\" 🧠"
+    }
+
+    fun removeLearnedSynonym(phrase: String) {
+        semanticSynonymManager.removeLearnedSynonym(phrase)
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (isAr) "تم حذف المرادف \"$phrase\"" else "Removed synonym \"$phrase\""
+    }
+
+    fun readScreenNow() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (isAr) "جاري قراءة محتوى الشاشة المعروض بالكامل..." else "Reading visible screen content..."
+        executeAction(ActionType.READ_SCREEN_TEXT)
+    }
+
+    fun summarizeScreenNow() {
+        val isAr = LocalizationManager.getEffectiveLanguage(_appLanguage.value) == "ar"
+        _systemStatusNotice.value = if (isAr) "جاري تحليل الشاشة المعروضة وتلخيصها بالذكاء الاصطناعي..." else "Analyzing and summarizing current screen..."
+        executeAction(ActionType.SUMMARIZE_SCREEN)
+    }
+
+    fun typeTextOnScreen(text: String) {
+        executeAction(ActionType.TYPE_ON_SCREEN, text)
     }
 
     // Security Threat Scanner

@@ -783,6 +783,43 @@ class ActionExecutionEngine(private val context: Context) {
                 )
             }
 
+            ActionType.READ_SCREEN_TEXT -> {
+                if (accessibility != null) {
+                    val screenText = accessibility.extractVisibleScreenText()
+                    onFeedback(
+                        if (isAr) "النصوص المقروءة على الشاشة:\n$screenText"
+                        else "Screen text extracted:\n$screenText"
+                    )
+                } else {
+                    onFeedback(if (isAr) "يرجى تفعيل خدمة الوصول لقراءة الشاشة" else "Accessibility required for screen reading")
+                }
+            }
+
+            ActionType.SUMMARIZE_SCREEN -> {
+                if (accessibility != null) {
+                    val screenText = accessibility.extractVisibleScreenText()
+                    val preview = screenText.take(150)
+                    onFeedback(
+                        if (isAr) "ملخص الشاشة الذكي: $preview..."
+                        else "Screen Summary: $preview..."
+                    )
+                } else {
+                    onFeedback(if (isAr) "يرجى تفعيل خدمة الوصول لتحليل الشاشة" else "Accessibility required for screen summary")
+                }
+            }
+
+            ActionType.TYPE_ON_SCREEN -> {
+                val textToType = payload?.trim() ?: "نص تلقائي"
+                if (accessibility != null) {
+                    accessibility.typeTextInActiveField(textToType) { status ->
+                        onFeedback(status)
+                    }
+                    onFeedback(if (isAr) "تمت كتابة النص على الشاشة: \"$textToType\" ✍️" else "Typed on screen: \"$textToType\" ✍️")
+                } else {
+                    onFeedback(if (isAr) "تم إرسال أمر الكتابة: $textToType" else "Type command dispatched: $textToType")
+                }
+            }
+
             ActionType.AI_SUMMARIZE_ACTIVITY -> {
                 onFeedback(
                     if (isAr) "تم استخراج الملخص الذكي لجميع نشاطات واستخدامات الهاتف 📊"

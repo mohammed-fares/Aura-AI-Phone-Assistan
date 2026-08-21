@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
@@ -38,25 +39,31 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,6 +71,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -110,6 +118,8 @@ import com.example.util.LocalizationManager
 
 enum class ActionCategory(val titleAr: String, val titleEn: String) {
     COMMUNICATION("اتصال ورسائل 📞", "Comms & Calls 📞"),
+    SCREEN_AI("رؤية الشاشة وتحليلها 👁️", "Screen Perception 👁️"),
+    SYNONYM_LEARNING("تعلم اللهجات والمرادفات 🧠", "Dialect Learning 🧠"),
     SYSTEM_APPS("تطبيقات ونظام 📱", "Apps & System 📱"),
     PHONE_TOOLS("أدوات وتحكم ⚙️", "Tools & Control ⚙️")
 }
@@ -139,6 +149,10 @@ fun VoiceAssistantScreen(
 
     var selectedCategory by remember { mutableStateOf(ActionCategory.COMMUNICATION) }
     var textInput by remember { mutableStateOf("") }
+    var showAddSynonymDialog by remember { mutableStateOf(false) }
+    var customSynonymWord by remember { mutableStateOf("") }
+    var customSynonymCanonical by remember { mutableStateOf("") }
+    val learnedSynonymsList by viewModel.learnedSynonyms.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
 
@@ -527,6 +541,70 @@ fun VoiceAssistantScreen(
                         onClick = { viewModel.executeAction(ActionType.SEND_EMAIL) }
                     )
                 }
+                ActionCategory.SCREEN_AI -> {
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Visibility,
+                        label = s("قراءة الشاشة", "Read Screen"),
+                        onClick = { viewModel.readScreenNow() }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.AutoAwesome,
+                        label = s("تلخيص الشاشة AI", "Summarize AI"),
+                        onClick = { viewModel.summarizeScreenNow() }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Keyboard,
+                        label = s("كتابة بالشاشة", "Type Text"),
+                        onClick = { viewModel.typeTextOnScreen("تمت المعالجة الذاتية") }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.CameraAlt,
+                        label = s("لقطة شاشة", "Screenshot"),
+                        onClick = { viewModel.executeAction(ActionType.TAKE_SCREENSHOT) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Message,
+                        label = s("تعليق بالشاشة", "Screen Comment"),
+                        onClick = { viewModel.executeAction(ActionType.COMMENT_ON_SCREEN) }
+                    )
+                }
+                ActionCategory.SYNONYM_LEARNING -> {
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Add,
+                        label = s("➕ علم كلمة جديدة", "➕ Teach Word"),
+                        onClick = { showAddSynonymDialog = true }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Psychology,
+                        label = s("علم: اطفي = اغلق", "Teach: اطفي"),
+                        onClick = { viewModel.learnNewSynonym("اطفي", "اغلق", ActionType.CLOSE_APP) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.School,
+                        label = s("علم: سكر = اغلق", "Teach: سكر"),
+                        onClick = { viewModel.learnNewSynonym("سكر", "اغلق", ActionType.CLOSE_APP) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Psychology,
+                        label = s("علم: بند = اغلق", "Teach: بند"),
+                        onClick = { viewModel.learnNewSynonym("بند", "اغلق", ActionType.CLOSE_APP) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.CallEnd,
+                        label = s("علم: الغي = إنهاء", "Teach: الغي"),
+                        onClick = { viewModel.learnNewSynonym("الغي", "إنهاء", ActionType.END_CALL) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.Psychology,
+                        label = s("علم: فركش = اغلق", "Teach: فركش"),
+                        onClick = { viewModel.learnNewSynonym("فركش", "اغلق", ActionType.CLOSE_APP) }
+                    )
+                    QuickPhoneActionButton(
+                        icon = Icons.Default.FlashlightOn,
+                        label = s("علم: ولّع = شغل", "Teach: ولع"),
+                        onClick = { viewModel.learnNewSynonym("ولع", "شغل", ActionType.TOGGLE_FLASHLIGHT) }
+                    )
+                }
                 ActionCategory.SYSTEM_APPS -> {
                     QuickPhoneActionButton(
                         icon = Icons.Default.Share,
@@ -606,7 +684,10 @@ fun VoiceAssistantScreen(
                 onDismiss = { viewModel.dismissExecutionPlan() },
                 onReturnHome = { viewModel.executeReturnHome() },
                 onEndCall = { viewModel.executeEndCall() },
-                onReplay = { viewModel.executeAction(plan.actionType, plan.actionPayload) }
+                onReplay = { viewModel.executeAction(plan.actionType, plan.actionPayload) },
+                onUpdateAndReExecute = { action, payload ->
+                    viewModel.updateAndReExecutePlan(action, payload)
+                }
             )
         }
 
@@ -808,6 +889,82 @@ fun VoiceAssistantScreen(
                     )
                 }
             }
+        }
+
+        // ==========================================
+        // 6. ADD CUSTOM SYNONYM / DIALECT DIALOG
+        // ==========================================
+        if (showAddSynonymDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddSynonymDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = PolishPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = s("تعليم الذكاء الاصطناعي مرادف جديد 🧠", "Teach AI New Dialect Synonym 🧠"),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = s(
+                                "علّم المساعد الصوتي كيف يفهم لهجتك المحلية، مثلاً: كلمة 'اطفي' أو 'سكر' تعني 'اغلق'، أو 'ولّع' تعني 'شغل'.",
+                                "Teach the assistant your dialect vocabulary. E.g.: 'اطفي' means 'اغلق', or 'ولع' means 'شغل'."
+                            ),
+                            fontSize = 11.sp,
+                            color = PolishTextSecondary
+                        )
+
+                        OutlinedTextField(
+                            value = customSynonymWord,
+                            onValueChange = { customSynonymWord = it },
+                            label = { Text(s("الكلمة / العبارة بلهجتك (مثلاً: اطفي)", "Dialect Word (e.g. اطفي)")) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = customSynonymCanonical,
+                            onValueChange = { customSynonymCanonical = it },
+                            label = { Text(s("المعنى الفصيح أو الأمر (مثلاً: اغلق)", "Standard Meaning (e.g. اغلق)")) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (customSynonymWord.isNotBlank() && customSynonymCanonical.isNotBlank()) {
+                                viewModel.learnNewSynonym(
+                                    phrase = customSynonymWord.trim(),
+                                    canonical = customSynonymCanonical.trim()
+                                )
+                                customSynonymWord = ""
+                                customSynonymCanonical = ""
+                                showAddSynonymDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PolishPrimary)
+                    ) {
+                        Text(s("تدريب وحفظ 🧠", "Train & Save 🧠"), color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showAddSynonymDialog = false }) {
+                        Text(s("إلغاء", "Cancel"))
+                    }
+                }
+            )
         }
     }
 }

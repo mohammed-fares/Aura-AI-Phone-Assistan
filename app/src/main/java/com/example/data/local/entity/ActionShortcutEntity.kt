@@ -21,6 +21,9 @@ enum class ActionType {
     SCROLL_UP,             // Scroll up on active screen
     SCROLL_DOWN,           // Scroll down on active screen
     CLICK_SCREEN_ELEMENT,  // Click button / text on active screen
+    TYPE_ON_SCREEN,        // Type text into active field on screen
+    READ_SCREEN_TEXT,      // Extract & read screen text aloud
+    SUMMARIZE_SCREEN,      // AI perception & screen summary
     TAKE_SCREENSHOT,       // Capture screen snapshot
     OPEN_CAMERA,           // Open system camera
     OPEN_GALLERY,          // Open photos and media gallery
